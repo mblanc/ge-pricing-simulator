@@ -2,7 +2,7 @@
 
 # Gemini Enterprise TCO & Capacity Simulator
 
-An interactive, multi-year **Total Cost of Ownership (TCO)** and **Provisioned Throughput (PT) capacity planning simulator** for Google Cloud Vertex AI and Gemini models.
+An interactive, multi-year **Total Cost of Ownership (TCO)** and **Provisioned Throughput (PT) capacity planning simulator** for **Google Cloud Gemini Enterprise APIs**.
 
 Built for **FinOps teams, Cloud Architects, Procurement leaders, and Enterprise AI decision-makers**, this tool bridges the gap between deep LLM tokenomics and executive financial planning—translating every engineering metric into plain business language in real time.
 
