@@ -27,7 +27,11 @@ import { HeaderKpis, SelectedKpiId } from './HeaderKpis';
 import { TcoComparisonTable } from './TcoComparisonTable';
 import { MonthlyRampChart } from './MonthlyRampChart';
 import { TrafficSeasonalityChart } from './TrafficSeasonalityChart';
-import { formatCurrencyExact, formatPct } from '../utils/format';
+import {
+  formatCurrencyExact,
+  formatPct,
+  formatTokensMillions,
+} from '../utils/format';
 
 interface GlobalSimulationTabProps {
   lots: LotConfig[];
@@ -65,6 +69,11 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
   const [visualView, setVisualView] = useState<GlobalVisualView>('seasonality');
 
   // Compute global tokenomics state across text lots (Lots 1-3) and all lots
+  const firstGoogleShare = lots[0]?.googleShare ?? 1.0;
+  const isUniformGoogleShare = lots.every(
+    (l) => Math.abs((l.googleShare ?? 1.0) - firstGoogleShare) < 0.001
+  );
+
   const textLots = lots.filter((l) => l.id !== 'lot4');
   const firstInputRatio = textLots[0]?.inputRatio ?? 0.8;
   const isUniformInputRatio = textLots.every(
@@ -94,6 +103,27 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
         endpointLocation: locKey,
         region: spec.regionDisplay,
       }))
+    );
+  };
+
+  const applyGlobalGoogleShare = (val: number) => {
+    const clamped = Math.max(0, Math.min(1, val));
+    onChangeAllLots(
+      lots.map((l) => {
+        const def = DEFAULT_LOTS.find((d) => d.id === l.id);
+        return {
+          ...l,
+          googleShare: clamped,
+          manualGsus:
+            l.ptSizingMode === 'MANUAL' && def
+              ? {
+                  y1: Math.round(def.manualGsus.y1 * clamped),
+                  y2: Math.round(def.manualGsus.y2 * clamped),
+                  y3: Math.round(def.manualGsus.y3 * clamped),
+                }
+              : l.manualGsus,
+        };
+      })
     );
   };
 
@@ -157,6 +187,7 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
   const activeRampMode: CapacityRampMode =
     globalConfig.capacityRampMode ?? 'SMOOTH_MONTHLY';
 
+  const googleSharePct = Math.round(firstGoogleShare * 100);
   const inputPct = Math.round(firstInputRatio * 100);
   const outputPct = 100 - inputPct;
   const cachePct = Math.round(firstCacheRatio * 100);
@@ -882,11 +913,83 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
                   Global workload & tokenomics
                 </h3>
                 <p className="type-body-sm text-[var(--md-on-surface-variant)] mt-0.5">
-                  Prompt ratios, caching, and batch processing applied across all lots
+                  Google share of volume, prompt ratios, caching, and batch processing across all lots
                 </p>
               </div>
 
-              {/* 3A. Input / Output Token Split */}
+              {/* 3A. % of Tokens Served by Google */}
+              <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
+                <div className="flex items-start justify-between gap-2 tabular-nums">
+                  <div>
+                    <label
+                      htmlFor="global-google-share"
+                      className="type-label-lg text-[var(--md-on-surface)]"
+                    >
+                      % of tokens served by Google
+                    </label>
+                    <div className="type-body-sm text-[var(--md-on-surface-variant)]">
+                      Share of total RFQ token volume routed to Google Gemini models (all 4 lots)
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={googleSharePct}
+                      aria-label="Global percentage of tokens served by Google"
+                      onChange={(e) => {
+                        const pct = Math.max(
+                          0,
+                          Math.min(100, Number(e.target.value))
+                        );
+                        applyGlobalGoogleShare(pct / 100);
+                      }}
+                      className="w-14 h-[30px] px-1.5 rounded-[6px] bg-[var(--md-surface-container)] border border-[var(--md-outline)] text-right text-[var(--md-on-surface)] type-body-sm tabular-nums"
+                    />
+                    <span className="type-label-lg text-[var(--md-primary)]">
+                      {isUniformGoogleShare ? '%' : '% (Mixed)'}
+                    </span>
+                  </div>
+                </div>
+                <input
+                  id="global-google-share"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={firstGoogleShare}
+                  onChange={(e) =>
+                    applyGlobalGoogleShare(Number(e.target.value))
+                  }
+                  className="w-full accent-[var(--md-primary)] cursor-pointer"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="type-body-sm text-[var(--md-on-surface-variant)] tabular-nums">
+                    {formatTokensMillions(sim.threeYearCumulated.totalTokensM)} served by Google (3Y)
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {[
+                      { label: '25%', val: 0.25 },
+                      { label: '50%', val: 0.5 },
+                      { label: '75%', val: 0.75 },
+                      { label: '100%', val: 1.0 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => applyGlobalGoogleShare(opt.val)}
+                        className="px-2 py-0.5 rounded bg-[var(--md-surface-container)] hover:bg-[var(--md-secondary-container)] type-body-sm text-[var(--md-on-surface)] cursor-pointer transition-colors"
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3B. Input / Output Token Split */}
               <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
                 <div className="flex items-start justify-between gap-2 tabular-nums">
                   <div>

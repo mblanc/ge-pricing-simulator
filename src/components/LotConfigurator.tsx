@@ -175,10 +175,29 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
     Math.ceil(lotSim.peakHourlyGsuDemand * 1.15)
   );
 
+  const googleShare = selectedLot.googleShare ?? 1.0;
+  const googleSharePct = Math.round(googleShare * 100);
   const inputPct = Math.round(selectedLot.inputRatio * 100);
   const outputPct = 100 - inputPct;
   const cachePct = Math.round(selectedLot.cacheRatio * 100);
   const batchPct = Math.round(selectedLot.batchRatio * 100);
+
+  const applyLotGoogleShare = (val: number) => {
+    const clamped = Math.max(0, Math.min(1, val));
+    const def = DEFAULT_LOTS.find((d) => d.id === selectedLot.id);
+    onChangeLot({
+      ...selectedLot,
+      googleShare: clamped,
+      manualGsus:
+        selectedLot.ptSizingMode === 'MANUAL' && def
+          ? {
+              y1: Math.round(def.manualGsus.y1 * clamped),
+              y2: Math.round(def.manualGsus.y2 * clamped),
+              y3: Math.round(def.manualGsus.y3 * clamped),
+            }
+          : selectedLot.manualGsus,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -204,6 +223,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
               r3.annualCostsListUsd.purePayGoBaselineCostUsd;
             const deltaVsList =
               list3Y > 0 ? (cost3Y - list3Y) / list3Y : 0;
+            const lotSharePct = Math.round((lot.googleShare ?? 1.0) * 100);
 
             return (
               <button
@@ -224,7 +244,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                           : 'bg-[var(--md-surface-container)] text-[var(--md-on-surface-variant)]'
                       }`}
                     >
-                      Lot {lot.lotNumber} · {(lot.endpointLocation ?? 'eu').toUpperCase()}
+                      Lot {lot.lotNumber} · {(lot.endpointLocation ?? 'eu').toUpperCase()} · {lotSharePct}% Google
                     </span>
                     <span
                       className={
@@ -999,11 +1019,83 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                   Workload & tokenomics assumptions (Lot {selectedLot.lotNumber})
                 </h3>
                 <p className="type-body-sm text-[var(--md-on-surface-variant)] mt-0.5">
-                  Configure prompt/response ratio, caching, batch offload, and model tier
+                  Configure Google share of volume, prompt/response ratio, caching, batch offload, and model tier
                 </p>
               </div>
 
-              {/* 2A. Input / Output Token Split */}
+              {/* 2A. % of Tokens Served by Google */}
+              <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
+                <div className="flex items-start justify-between gap-2 tabular-nums">
+                  <div>
+                    <label
+                      htmlFor={`lot-google-share-${selectedLot.id}`}
+                      className="type-label-lg text-[var(--md-on-surface)]"
+                    >
+                      % of tokens served by Google
+                    </label>
+                    <div className="type-body-sm text-[var(--md-on-surface-variant)]">
+                      Share of Lot {selectedLot.lotNumber} token volume routed to Google Gemini models
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <input
+                      id={`lot-google-share-${selectedLot.id}`}
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={googleSharePct}
+                      onChange={(e) => {
+                        const pct = Math.max(
+                          0,
+                          Math.min(100, Number(e.target.value))
+                        );
+                        applyLotGoogleShare(pct / 100);
+                      }}
+                      className="w-14 h-[30px] px-1.5 rounded-[6px] bg-[var(--md-surface-container)] border border-[var(--md-outline)] text-right text-[var(--md-on-surface)] type-body-sm tabular-nums"
+                    />
+                    <span className="type-body-sm text-[var(--md-on-surface-variant)]">
+                      % Google
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={googleShare}
+                  aria-label={`Percentage of tokens served by Google slider for ${selectedLot.shortName}`}
+                  onChange={(e) =>
+                    applyLotGoogleShare(Number(e.target.value))
+                  }
+                  className="w-full accent-[var(--md-primary)] cursor-pointer"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="type-body-sm text-[var(--md-on-surface-variant)] tabular-nums">
+                    {formatTokensMillions(lot3YTokensM)} served by Google (3Y)
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {[
+                      { label: '25%', val: 0.25 },
+                      { label: '50%', val: 0.5 },
+                      { label: '75%', val: 0.75 },
+                      { label: '100%', val: 1.0 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => applyLotGoogleShare(opt.val)}
+                        className="px-2 py-0.5 rounded bg-[var(--md-surface-container)] hover:bg-[var(--md-secondary-container)] type-body-sm text-[var(--md-on-surface)] cursor-pointer transition-colors"
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2B. Input / Output Token Split */}
               <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
                 <div className="flex items-start justify-between gap-2 tabular-nums">
                   <div>

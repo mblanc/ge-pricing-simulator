@@ -21,6 +21,8 @@ export interface LotConfig {
     y2: number; // 2028
     y3: number; // 2029
   };
+  /** Share of total lot tokens served by Google Gemini models (0..1, default 1.0 = 100%) */
+  googleShare?: number;
   /** Percentage of total tokens that are Input tokens (0..1) */
   inputRatio: number;
   /** Percentage of Input tokens served from Context Cache (0..1) */
@@ -263,6 +265,7 @@ export const DEFAULT_LOTS: LotConfig[] = [
       y2: 1_230_000, // 1.23 Trillion tokens
       y3: 1_790_000, // 1.79 Trillion tokens
     },
+    googleShare: 1.0,
     inputRatio: 0.80,
     cacheRatio: 0.15,
     batchRatio: 0.0,
@@ -305,6 +308,7 @@ export const DEFAULT_LOTS: LotConfig[] = [
       y2: 4_470_000, // 4.47 Trillion tokens
       y3: 5_950_000, // 5.95 Trillion tokens
     },
+    googleShare: 1.0,
     inputRatio: 0.80,
     cacheRatio: 0.15,
     batchRatio: 0.0,
@@ -347,6 +351,7 @@ export const DEFAULT_LOTS: LotConfig[] = [
       y2: 9_820_000,  // 9.82 Trillion tokens
       y3: 15_220_000, // 15.22 Trillion tokens
     },
+    googleShare: 1.0,
     inputRatio: 0.80,
     cacheRatio: 0.15,
     batchRatio: 0.0,
@@ -389,6 +394,7 @@ export const DEFAULT_LOTS: LotConfig[] = [
       y2: 180_000, // 180 Billion tokens
       y3: 287_000, // 287 Billion tokens
     },
+    googleShare: 1.0,
     inputRatio: 0.05, // 5% Input tokens, 95% Output tokens
     cacheRatio: 0.0,
     batchRatio: 0.0,

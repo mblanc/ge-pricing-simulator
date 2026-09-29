@@ -450,20 +450,32 @@ export function runFullSimulation(
     const lotGsuAnnualCostUsd = lotGsuMonthlyPriceUsd * 12;
 
     for (const yr of years) {
-      const baseVolumeM = lot.volumesM[yr.key];
+      const googleShare = Math.max(0, Math.min(1, lot.googleShare ?? 1.0));
+      const rawRfqVolumeM = lot.volumesM[yr.key];
+      const baseVolumeM = rawRfqVolumeM * googleShare;
+
+      // Also compute unit ratios on a positive reference volume so blended unit price & burndown stay defined even at 0% share
+      const refVolM = baseVolumeM > 0 ? baseVolumeM : Math.max(1, rawRfqVolumeM);
       const baseInputM = baseVolumeM * lot.inputRatio;
       const baseVisibleOutputM = baseVolumeM * (1 - lot.inputRatio);
 
-      // Apply Thinking Level multiplier for Lots supporting thinking (Lot 1 & Lot 2)
+      const refBaseInputM = refVolM * lot.inputRatio;
+      const refBaseVisibleOutputM = refVolM * (1 - lot.inputRatio);
+
+      // Apply Thinking Level multiplier for Lots supporting thinking (Lot 1 & 2)
       let effectiveInputM = baseInputM;
       let effectiveOutputTextAndThinkingM = baseVisibleOutputM;
       let thinkingTokensIncludedM = 0;
+
+      let refInputM = refBaseInputM;
+      let refOutputTextAndThinkingM = refBaseVisibleOutputM;
 
       if (lot.supportsThinkingLevel) {
         const thinkMult = lot.thinkingMultiplierByLevel[lot.thinkingLevel] ?? 0;
         if (globalConfig.thinkingEnvelopeMode === 'ADD_ON_TOP') {
           thinkingTokensIncludedM = baseVisibleOutputM * thinkMult;
           effectiveOutputTextAndThinkingM = baseVisibleOutputM + thinkingTokensIncludedM;
+          refOutputTextAndThinkingM = refBaseVisibleOutputM * (1 + thinkMult);
         } else {
           const extraShift = (thinkMult - 0.25) * 0.06;
           const adjustedOutputRatio = Math.min(
@@ -474,20 +486,32 @@ export function runFullSimulation(
           effectiveInputM = baseVolumeM * (1 - adjustedOutputRatio);
           thinkingTokensIncludedM =
             effectiveOutputTextAndThinkingM * (thinkMult / (1 + thinkMult));
+
+          refOutputTextAndThinkingM = refVolM * adjustedOutputRatio;
+          refInputM = refVolM * (1 - adjustedOutputRatio);
         }
       }
 
       let outputImageM = 0;
+      let refOutputImageM = 0;
       if (lot.id === 'lot4' && lot.imageMix) {
         const textShare = lot.imageMix.textOutputShareOfOutput;
         outputImageM = effectiveOutputTextAndThinkingM * (1 - textShare);
         effectiveOutputTextAndThinkingM = effectiveOutputTextAndThinkingM * textShare;
+
+        refOutputImageM = refOutputTextAndThinkingM * (1 - textShare);
+        refOutputTextAndThinkingM = refOutputTextAndThinkingM * textShare;
       }
 
       const totalTokensM =
         effectiveInputM + effectiveOutputTextAndThinkingM + outputImageM;
       const inputCachedM = effectiveInputM * lot.cacheRatio;
       const inputNonCachedM = effectiveInputM * (1 - lot.cacheRatio);
+
+      const refTotalTokensM =
+        refInputM + refOutputTextAndThinkingM + refOutputImageM;
+      const refInputCachedM = refInputM * lot.cacheRatio;
+      const refInputNonCachedM = refInputM * (1 - lot.cacheRatio);
 
       // Price per 1M tokens using the Lot's selected endpoint location (global, eu, us)
       const totalStandardPayGoIf100PctRealtimeUsd =
@@ -496,8 +520,14 @@ export function runFullSimulation(
         effectiveOutputTextAndThinkingM * effectivePrices.outputTextAndThinking +
         outputImageM * (effectivePrices.outputImage ?? 0);
 
+      const refTotalStandardPayGoUsd =
+        refInputNonCachedM * effectivePrices.inputNonCached +
+        refInputCachedM * effectivePrices.inputCached +
+        refOutputTextAndThinkingM * effectivePrices.outputTextAndThinking +
+        refOutputImageM * (effectivePrices.outputImage ?? 0);
+
       const blendedStandardPayGoPricePer1M =
-        totalTokensM > 0 ? totalStandardPayGoIf100PctRealtimeUsd / totalTokensM : 0;
+        refTotalTokensM > 0 ? refTotalStandardPayGoUsd / refTotalTokensM : 0;
 
       // Split between Batch (carved out first at 0.5x Standard PayGo) and Real-Time Online
       const batchTokensM = totalTokensM * lot.batchRatio;
@@ -518,10 +548,17 @@ export function runFullSimulation(
           lot.gsuSpec.burndownWeights.outputTextAndThinking +
         outputImageM * (lot.gsuSpec.burndownWeights.outputImage ?? 0);
 
+      const refTotalBurndownM =
+        refInputNonCachedM * lot.gsuSpec.burndownWeights.inputNonCached +
+        refInputCachedM * lot.gsuSpec.burndownWeights.inputCached +
+        refOutputTextAndThinkingM *
+          lot.gsuSpec.burndownWeights.outputTextAndThinking +
+        refOutputImageM * (lot.gsuSpec.burndownWeights.outputImage ?? 0);
+
       const annualRealtimeBurndownTokensM =
         totalBurndownIf100PctRealtimeM * (1 - lot.batchRatio);
       const blendedBurndownPerToken =
-        totalTokensM > 0 ? totalBurndownIf100PctRealtimeM / totalTokensM : 1;
+        refTotalTokensM > 0 ? refTotalBurndownM / refTotalTokensM : 1;
 
       const avgBurndownTokensPerSec =
         (annualRealtimeBurndownTokensM * 1_000_000) / SECONDS_PER_YEAR;

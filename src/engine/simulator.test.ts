@@ -249,6 +249,35 @@ describe('FR-Telco-1 RFQ Gemini Enterprise EU Pricing & PT Simulator Engine', ()
       optStep.totalsByYear.y1.avgPtUtilization
     );
   });
+
+  it('scales token volumes, GSU demand, and costs based on % of tokens served by Google (googleShare)', () => {
+    const fullOut = runFullSimulation(DEFAULT_LOTS, DEFAULT_GLOBAL_CONFIG);
+    const halfLots = DEFAULT_LOTS.map((l) => ({ ...l, googleShare: 0.5 }));
+    const halfOut = runFullSimulation(halfLots, DEFAULT_GLOBAL_CONFIG);
+
+    // 50% Google share halves 3-year token volume and pure PayGo baseline cost
+    expect(halfOut.threeYearCumulated.totalTokensM).toBeCloseTo(
+      fullOut.threeYearCumulated.totalTokensM * 0.5,
+      2
+    );
+    expect(halfOut.threeYearCumulated.threeYearFsp.purePayGoUsd).toBeCloseTo(
+      fullOut.threeYearCumulated.threeYearFsp.purePayGoUsd * 0.5,
+      2
+    );
+    expect(halfOut.byLotAndYear.lot1.y1.avgGsuDemand).toBeCloseTo(
+      fullOut.byLotAndYear.lot1.y1.avgGsuDemand * 0.5,
+      4
+    );
+
+    // 0% Google share results in 0 tokens, 0 GSUs, and $0 cost while keeping break-even utilization valid
+    const zeroLots = DEFAULT_LOTS.map((l) => ({ ...l, googleShare: 0 }));
+    const zeroOut = runFullSimulation(zeroLots, DEFAULT_GLOBAL_CONFIG);
+    expect(zeroOut.threeYearCumulated.totalTokensM).toBe(0);
+    expect(zeroOut.totalsByYear.y1.totalProvisionedGsus).toBe(0);
+    expect(zeroOut.threeYearCumulated.threeYearFsp.hybridTotalUsd).toBe(0);
+    expect(zeroOut.avgBreakEvenUtilization).toBeCloseTo(
+      fullOut.avgBreakEvenUtilization,
+      4
+    );
+  });
 });
-
-
