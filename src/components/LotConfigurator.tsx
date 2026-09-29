@@ -520,7 +520,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                         <th className="px-4 type-label-lg text-[var(--md-on-surface-variant)]">
                           <div>Contract year</div>
                           <div className="type-body-sm font-normal text-[var(--md-on-surface-variant)]">
-                            RFQ horizon
+                            3-year horizon
                           </div>
                         </th>
                         <th className="px-4 type-label-lg text-[var(--md-on-surface-variant)] text-right">

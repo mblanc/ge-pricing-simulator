@@ -359,7 +359,7 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
               className="md-chip-filter cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>RFQ baseline (24/7 floor)</span>
+              <span>Conservative baseline (24/7 floor)</span>
             </button>
             <button
               type="button"
@@ -928,7 +928,7 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
                       % of tokens served by Google
                     </label>
                     <div className="type-body-sm text-[var(--md-on-surface-variant)]">
-                      Share of total RFQ token volume routed to Google Gemini models (all 4 lots)
+                      Share of total workload token volume routed to Google Gemini models (all 4 lots)
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -1154,7 +1154,7 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
                   Thinking token budget mode (Lots 1 & 2)
                 </label>
                 <div className="type-body-sm text-[var(--md-on-surface-variant)]">
-                  Whether reasoning tokens stay inside the RFQ output cap or add extra volume
+                  Whether reasoning tokens stay inside the output token cap or add extra volume
                 </div>
               </div>
               <select
@@ -1171,7 +1171,7 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
                 className="w-full h-[38px] px-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] border border-[var(--md-outline)] text-[var(--md-on-surface)] type-body-md cursor-pointer"
               >
                 <option value="FIXED_TOTAL">
-                  Keep RFQ token cap fixed (thinking included inside output budget)
+                  Keep total token cap fixed (thinking included inside output budget)
                 </option>
                 <option value="ADD_ON_TOP">
                   Add extra thinking tokens on top of output (+total volume)

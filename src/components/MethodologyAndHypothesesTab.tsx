@@ -159,7 +159,7 @@ export const MethodologyAndHypothesesTab: React.FC<
               </div>
             </div>
             <p className="type-body-sm text-[var(--md-on-surface-variant)]">
-              Each of the 4 RFQ lots operates an <strong>independent GSU pool</strong>. Endpoints in <code>eu</code> and <code>us</code> apply the official <strong>+10% (1.10×) regional uplift</strong> over <code>global</code> (1.00×). FSP commitments (-{Math.round(disc0A * 100)}%, -{Math.round(disc1Y * 100)}%, -{Math.round(disc3Y * 100)}%) discount variable PayGo and Batch, while the <strong>-{ptDiscountPct}% PT discount</strong> applies to fixed GSUs.
+              Each of the 4 workload lots operates an <strong>independent GSU pool</strong>. Endpoints in <code>eu</code> and <code>us</code> apply the official <strong>+10% (1.10×) regional uplift</strong> over <code>global</code> (1.00×). FSP commitments (-{Math.round(disc0A * 100)}%, -{Math.round(disc1Y * 100)}%, -{Math.round(disc3Y * 100)}%) discount variable PayGo and Batch, while the <strong>-{ptDiscountPct}% PT discount</strong> applies to fixed GSUs.
             </p>
           </div>
         </div>
@@ -181,7 +181,7 @@ export const MethodologyAndHypothesesTab: React.FC<
             <thead>
               <tr className="h-[48px] bg-[var(--md-surface-container-lowest)] border-b border-[var(--md-outline-variant)]">
                 <th className="px-4 type-label-lg text-[var(--md-on-surface-variant)]">
-                  <div>RFQ lot & active model</div>
+                  <div>Workload lot & active model</div>
                   <div className="type-body-sm font-normal text-[var(--md-on-surface-variant)]">
                     Assigned Gemini SKU
                   </div>
@@ -353,7 +353,7 @@ export const MethodologyAndHypothesesTab: React.FC<
                   </div>
                 </th>
                 <th className="px-4 type-label-lg text-[var(--md-on-surface-variant)] text-right">
-                  <div>RFQ volumes (Y1 / Y2 / Y3)</div>
+                  <div>Annual volumes (Y1 / Y2 / Y3)</div>
                   <div className="type-body-sm font-normal text-[var(--md-on-surface-variant)]">
                     Annual token demand
                   </div>

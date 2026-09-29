@@ -77,13 +77,13 @@ export function App() {
     setActiveFspTier('threeYearFsp');
     setSelectedYear('y1');
     setSelectedKpi('tco');
-    setJsonToast('Restored FR-Telco-1 RFQ baseline defaults');
+    setJsonToast('Restored baseline defaults');
     setTimeout(() => setJsonToast(null), 2600);
   };
 
   const handleExportScenarioJson = () => {
     const snapshot = {
-      schema: 'fr-telco-1-rfq-gemini-enterprise-eu-simulator-v1',
+      schema: 'gemini-enterprise-tco-simulator-v1',
       exportedAt: new Date().toISOString(),
       activeFspTier,
       selectedYear,
@@ -108,7 +108,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'FR_Telco_1_RFQ_Gemini_Enterprise_EU_Scenario_Snapshot.json';
+    a.download = 'Gemini_Enterprise_3Y_TCO_Scenario_Snapshot.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -133,7 +133,7 @@ export function App() {
           setTimeout(() => setJsonToast(null), 2600);
         } else {
           setJsonToast(
-            'Could not import file: missing FR-Telco-1 RFQ lot or configuration data. Choose a valid scenario .json file.'
+            'Could not import file: missing workload lot or configuration data. Choose a valid scenario .json file.'
           );
           setTimeout(() => setJsonToast(null), 4200);
         }
@@ -156,7 +156,7 @@ export function App() {
     }
   > = {
     global: {
-      title: 'Global simulation — FR-Telco-1 3-year TCO (all 4 lots combined)',
+      title: 'Global simulation — 3-year TCO (all 4 lots combined)',
       subtitle:
         'Company-wide 36-month cost results on top, followed by global commercial & capacity variables below that update all 4 lots simultaneously.',
     },
@@ -181,12 +181,12 @@ export function App() {
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--md-primary-container)] text-[var(--md-on-primary-container)] type-title-sm shrink-0"
-              title="Google Cloud Gemini Enterprise · FR-Telco-1 RFQ"
+              title="Google Cloud Gemini Enterprise · TCO & Capacity Simulator"
             >
               G
             </div>
             <h1 className="type-title-lg text-[var(--md-on-surface)] truncate">
-              FR-Telco-1 RFQ · Gemini Enterprise TCO Simulator
+              Gemini Enterprise · TCO & Capacity Simulator
             </h1>
             <span className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--md-surface-container-high)] text-[var(--md-on-surface-variant)] type-label-md">
               <Globe2 className="w-3.5 h-3.5 text-[var(--md-primary)]" />
@@ -242,7 +242,7 @@ export function App() {
               type="button"
               onClick={handleResetAll}
               className="md-btn-text cursor-pointer"
-              title="Reset all global and lot parameters to FR-Telco-1 RFQ baseline"
+              title="Reset all global and lot parameters to baseline defaults"
             >
               <RotateCcw className="w-4 h-4" />
               <span className="hidden md:inline">Reset baseline</span>
@@ -290,6 +290,21 @@ export function App() {
 
       {/* Main Workspace Container */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-5 space-y-6">
+        {/* Top Non-Binding Visualization & Simulation Tool Disclaimer Cartouche */}
+        <div
+          role="note"
+          aria-label="Non-binding simulation disclaimer"
+          className="md-card px-4 py-3 flex items-start sm:items-center gap-2.5"
+        >
+          <Info className="w-4 h-4 text-[var(--md-primary)] shrink-0 mt-0.5 sm:mt-0" />
+          <p className="type-body-sm text-[var(--md-on-surface-variant)]">
+            <strong className="text-[var(--md-on-surface)]">
+              Non-binding visualization & simulation tool:
+            </strong>{' '}
+            This interactive simulator is designed for illustrative capacity planning and architectural modeling on <strong>Google Cloud Gemini Enterprise</strong>. All costs, GSU burndown ratios, and discount figures shown are non-binding estimates for simulation purposes only and do not constitute a formal commercial offer or contract.
+          </p>
+        </div>
+
         {/* Primary 3-Tab Switcher Header: Global | Per-Lot | Hypotheses */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -397,19 +412,6 @@ export function App() {
           />
         )}
       </main>
-
-      {/* Single Concise Footer Disclaimer (removed duplicate top banner) */}
-      <footer className="max-w-[1600px] w-full mx-auto px-6 pt-2 pb-6">
-        <div className="md-card p-4 flex items-start gap-3">
-          <Info className="w-4 h-4 text-[var(--md-primary)] shrink-0 mt-0.5" />
-          <p className="type-body-sm text-[var(--md-on-surface-variant)] max-w-[75ch]">
-            <strong className="text-[var(--md-on-surface)]">
-              Non-binding visualization & simulation tool:
-            </strong>{' '}
-            This interactive simulator is custom-built for illustrative capacity planning and architectural modeling for <strong>FR-Telco-1</strong> on <strong>Google Cloud Gemini Enterprise</strong>. All costs, GSU burndown ratios, and discount figures shown are non-binding estimates for simulation purposes only and do not constitute a formal commercial offer or contract.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

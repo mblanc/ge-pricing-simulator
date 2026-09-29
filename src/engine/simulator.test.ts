@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_GLOBAL_CONFIG, DEFAULT_LOTS } from '../data/rfqDefaults';
 import { runFullSimulation } from './simulator';
 
-describe('FR-Telco-1 RFQ Gemini Enterprise EU Pricing & PT Simulator Engine', () => {
+describe('Gemini Enterprise EU Pricing & PT Simulator Engine', () => {
   it('computes 3-year totals across all 4 Lots with default Minimum Floor PT sizing', () => {
     const out = runFullSimulation(DEFAULT_LOTS, DEFAULT_GLOBAL_CONFIG);
 

@@ -103,7 +103,7 @@ export const TcoComparisonTable: React.FC<TcoComparisonTableProps> = ({
     const gsuMonthly = EU_GSU_MONTHLY_PRICE_USD[globalConfig.gsuCommitTerm];
     const rows: string[][] = [
       [
-        'FR-Telco-1 2027-2029 LLM RFQ - Google Cloud Gemini Enterprise (eu multi-region) TCO simulation',
+        'Google Cloud Gemini Enterprise 2027-2029 (eu multi-region) 3-Year TCO Simulation',
       ],
       ['Parameter', 'Value', 'Notes', '', '', ''],
       [
@@ -193,7 +193,7 @@ export const TcoComparisonTable: React.FC<TcoComparisonTableProps> = ({
     link.setAttribute('href', encodedUri);
     link.setAttribute(
       'download',
-      'FR_Telco_1_RFQ_Gemini_Enterprise_EU_3Y_TCO_Simulation.csv'
+      'Gemini_Enterprise_EU_3Y_TCO_Simulation.csv'
     );
     document.body.appendChild(link);
     link.click();
@@ -449,7 +449,7 @@ export const TcoComparisonTable: React.FC<TcoComparisonTableProps> = ({
             Per-lot 3-year summary (active commercial tier)
           </h3>
           <p className="type-body-sm text-[var(--md-on-surface-variant)] max-w-[72ch] mt-0.5">
-            Shows how each of the 4 RFQ workload lots contributes to the 36-month token volume, reserved GSU capacity, and total spend.
+            Shows how each of the 4 workload lots contributes to the 36-month token volume, reserved GSU capacity, and total spend.
           </p>
         </div>
 
