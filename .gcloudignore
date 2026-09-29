@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.git/
+.agent/
+.gemini/
+.impeccable/
+*.xlsx
+*.png
+*.md
+tsconfig.tsbuildinfo
