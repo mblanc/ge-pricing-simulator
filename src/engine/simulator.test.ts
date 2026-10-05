@@ -1,8 +1,81 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GLOBAL_CONFIG, DEFAULT_LOTS } from '../data/rfqDefaults';
+import {
+  DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_LOTS,
+  formatLot1DisplayName,
+  getLotEffectivePricesPer1M,
+  LOT1_MODEL_PRESETS,
+} from '../data/rfqDefaults';
 import { runFullSimulation } from './simulator';
 
 describe('Gemini Enterprise EU Pricing & PT Simulator Engine', () => {
+  it('defaults Lot 1 to Gemini 4 Argon ($4.00/$0.20/$20.00 Global, $4.40/$0.22/$22.00 EU, 1.0x/0.1x/6.0x burndown, 260 tok/s GSU) and supports toggling to Gemini 3.8 Flash', () => {
+    const lot1Default = DEFAULT_LOTS.find((l) => l.id === 'lot1')!;
+    expect(lot1Default.modelId).toBe('gemini-4-argon');
+    expect(lot1Default.modelDisplayName).toBe('Gemini 4 Argon (High Thinking)');
+    expect(lot1Default.euPricesPer1M).toEqual({
+      inputNonCached: 4.4,
+      inputCached: 0.22,
+      outputTextAndThinking: 22.0,
+    });
+    expect(
+      getLotEffectivePricesPer1M({ ...lot1Default, endpointLocation: 'global' })
+    ).toEqual({
+      inputNonCached: 4.0,
+      inputCached: 0.2,
+      outputTextAndThinking: 20.0,
+      outputImage: undefined,
+    });
+    expect(lot1Default.gsuSpec.throughputPerGsuPerSec).toBe(260);
+    expect(lot1Default.gsuSpec.burndownWeights).toEqual({
+      inputNonCached: 1.0,
+      inputCached: 0.1,
+      outputTextAndThinking: 6.0,
+    });
+
+    const argonOut = runFullSimulation(DEFAULT_LOTS, DEFAULT_GLOBAL_CONFIG);
+
+    // Toggle Lot 1 to Gemini 3.8 Flash
+    const flashPreset = LOT1_MODEL_PRESETS['gemini-3.8-flash'];
+    const flashLots = DEFAULT_LOTS.map((l) =>
+      l.id === 'lot1'
+        ? {
+            ...l,
+            modelId: flashPreset.modelId,
+            shortName: flashPreset.shortName,
+            subtitle: flashPreset.subtitle,
+            modelDisplayName: formatLot1DisplayName(
+              flashPreset.modelId,
+              l.thinkingLevel
+            ),
+            euPricesPer1M: { ...flashPreset.euPricesPer1M },
+            gsuSpec: structuredClone(flashPreset.gsuSpec),
+            manualGsus: { ...flashPreset.manualGsus },
+          }
+        : l
+    );
+    const flashOut = runFullSimulation(flashLots, DEFAULT_GLOBAL_CONFIG);
+
+    // Gemini 4 Argon has higher output burndown weight (6.0x vs 5.0x) and lower GSU throughput (500 vs 675 tok/s),
+    // resulting in higher burndown per token, higher GSU demand, and higher 3Y TCO than Gemini 3.8 Flash
+    expect(argonOut.byLotAndYear.lot1.y1.blendedBurndownPerToken).toBeGreaterThan(
+      flashOut.byLotAndYear.lot1.y1.blendedBurndownPerToken
+    );
+    expect(argonOut.byLotAndYear.lot1.y1.avgGsuDemand).toBeGreaterThan(
+      flashOut.byLotAndYear.lot1.y1.avgGsuDemand
+    );
+    expect(
+      argonOut.byLotAndYear.lot1.y1.annualCostsFspUsd.threeYearFsp.hybridTotalUsd
+    ).toBeGreaterThan(
+      flashOut.byLotAndYear.lot1.y1.annualCostsFspUsd.threeYearFsp.hybridTotalUsd
+    );
+
+    // Per-lot breakEvenUtilization is populated for both Argon and Flash
+    expect(argonOut.byLotAndYear.lot1.y1.breakEvenUtilization).toBeGreaterThan(0.5);
+    expect(argonOut.byLotAndYear.lot1.y1.breakEvenUtilization).toBeLessThan(1.0);
+    expect(flashOut.byLotAndYear.lot1.y1.breakEvenUtilization).toBeGreaterThan(0.5);
+  });
+
   it('computes 3-year totals across all 4 Lots with default Minimum Floor PT sizing', () => {
     const out = runFullSimulation(DEFAULT_LOTS, DEFAULT_GLOBAL_CONFIG);
 

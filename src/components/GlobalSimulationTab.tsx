@@ -17,8 +17,11 @@ import {
   ENDPOINT_LOCATION_SPECS,
   EndpointLocation,
   EU_GSU_MONTHLY_PRICE_USD,
+  formatLot1DisplayName,
   GlobalSimConfig,
   GsuCommitTerm,
+  LOT1_MODEL_PRESETS,
+  Lot1ModelId,
   LotConfig,
   PtSizingMode,
 } from '../data/rfqDefaults';
@@ -695,8 +698,19 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
                     [
                       {
                         mode: 'OPTIMAL_TCO',
-                        label: 'Optimal TCO (~75% util)',
-                        desc: 'Lowest total cost',
+                        label: `Optimal TCO (≥${Math.round(
+                          sim.avgBreakEvenUtilization * 100
+                        )}% util)`,
+                        desc:
+                          currentGlobalPtMode === 'OPTIMAL_TCO' &&
+                          sim.totalsByYear[selectedYear].totalProvisionedGsus > 0
+                            ? `Lowest cost · ${Math.round(
+                                sim.totalsByYear[selectedYear].avgPtUtilization *
+                                  100
+                              )}% avg util`
+                            : `Only buys GSUs busy ≥${Math.round(
+                                sim.avgBreakEvenUtilization * 100
+                              )}% of week`,
                       },
                       {
                         mode: 'MIN_FLOOR',
@@ -1144,39 +1158,111 @@ export const GlobalSimulationTab: React.FC<GlobalSimulationTabProps> = ({
               </div>
             </div>
 
-            {/* 3D. Thinking Token Budget Envelope */}
-            <div className="pt-3 border-t border-[var(--md-outline-variant)] space-y-2">
-              <div>
-                <label
-                  htmlFor="global-thinking-envelope"
-                  className="type-label-lg text-[var(--md-on-surface)]"
-                >
-                  Thinking token budget mode (Lots 1 & 2)
-                </label>
-                <div className="type-body-sm text-[var(--md-on-surface-variant)]">
-                  Whether reasoning tokens stay inside the output token cap or add extra volume
+            {/* 3D. Lot 1 Model Architecture & Thinking Token Budget Envelope */}
+            <div className="pt-3 border-t border-[var(--md-outline-variant)] space-y-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="type-label-lg text-[var(--md-on-surface)]">
+                    Lot 1 frontier model architecture
+                  </span>
+                  <span className="type-body-sm text-[var(--md-on-surface-variant)] tabular-nums">
+                    {lots[0]?.gsuSpec.throughputPerGsuPerSec ?? 260} tok/s ·{' '}
+                    {lots[0]?.gsuSpec.burndownWeights.outputTextAndThinking ?? 6}× Out
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(
+                    [
+                      {
+                        id: 'gemini-4-argon',
+                        label: 'Gemini 4 Argon (Default)',
+                      },
+                      {
+                        id: 'gemini-3.8-flash',
+                        label: 'Gemini 3.8 Flash',
+                      },
+                    ] as { id: Lot1ModelId; label: string }[]
+                  ).map((opt) => {
+                    const lot1 = lots.find((l) => l.id === 'lot1') ?? lots[0];
+                    const isSelected = lot1?.modelId === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          const preset = LOT1_MODEL_PRESETS[opt.id];
+                          onChangeAllLots(
+                            lots.map((l) => {
+                              if (l.id !== 'lot1') return l;
+                              const share = l.googleShare ?? 1.0;
+                              return {
+                                ...l,
+                                modelId: preset.modelId,
+                                shortName: preset.shortName,
+                                subtitle: preset.subtitle,
+                                modelDisplayName: formatLot1DisplayName(
+                                  preset.modelId,
+                                  l.thinkingLevel
+                                ),
+                                euPricesPer1M: { ...preset.euPricesPer1M },
+                                gsuSpec: structuredClone(preset.gsuSpec),
+                                manualGsus: {
+                                  y1: Math.round(preset.manualGsus.y1 * share),
+                                  y2: Math.round(preset.manualGsus.y2 * share),
+                                  y3: Math.round(preset.manualGsus.y3 * share),
+                                },
+                              };
+                            })
+                          );
+                        }}
+                        aria-pressed={isSelected}
+                        className={`${
+                          isSelected
+                            ? 'md-chip-filter-selected'
+                            : 'md-chip-filter'
+                        } cursor-pointer`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <select
-                id="global-thinking-envelope"
-                value={globalConfig.thinkingEnvelopeMode}
-                onChange={(e) =>
-                  onChangeGlobalConfig({
-                    ...globalConfig,
-                    thinkingEnvelopeMode: e.target.value as
-                      | 'ADD_ON_TOP'
-                      | 'FIXED_TOTAL',
-                  })
-                }
-                className="w-full h-[38px] px-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] border border-[var(--md-outline)] text-[var(--md-on-surface)] type-body-md cursor-pointer"
-              >
-                <option value="FIXED_TOTAL">
-                  Keep total token cap fixed (thinking included inside output budget)
-                </option>
-                <option value="ADD_ON_TOP">
-                  Add extra thinking tokens on top of output (+total volume)
-                </option>
-              </select>
+
+              <div className="space-y-1.5 pt-2 border-t border-[var(--md-outline-variant)]">
+                <div>
+                  <label
+                    htmlFor="global-thinking-envelope"
+                    className="type-label-lg text-[var(--md-on-surface)]"
+                  >
+                    Thinking token budget mode (Lots 1 & 2)
+                  </label>
+                  <div className="type-body-sm text-[var(--md-on-surface-variant)]">
+                    Whether reasoning tokens stay inside the output token cap or add extra volume
+                  </div>
+                </div>
+                <select
+                  id="global-thinking-envelope"
+                  value={globalConfig.thinkingEnvelopeMode}
+                  onChange={(e) =>
+                    onChangeGlobalConfig({
+                      ...globalConfig,
+                      thinkingEnvelopeMode: e.target.value as
+                        | 'ADD_ON_TOP'
+                        | 'FIXED_TOTAL',
+                    })
+                  }
+                  className="w-full h-[38px] px-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] border border-[var(--md-outline)] text-[var(--md-on-surface)] type-body-md cursor-pointer"
+                >
+                  <option value="FIXED_TOTAL">
+                    Keep total token cap fixed (thinking included inside output budget)
+                  </option>
+                  <option value="ADD_ON_TOP">
+                    Add extra thinking tokens on top of output (+total volume)
+                  </option>
+                </select>
+              </div>
             </div>
           </div>
         </div>

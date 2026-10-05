@@ -13,10 +13,13 @@ import {
   DEFAULT_LOTS,
   ENDPOINT_LOCATION_SPECS,
   EndpointLocation,
+  formatLot1DisplayName,
   getLot4BlendedEuSpecs,
   getLotEffectiveGsuMonthlyPriceUsd,
   getLotEffectivePricesPer1M,
   GlobalSimConfig,
+  LOT1_MODEL_PRESETS,
+  Lot1ModelId,
   LotConfig,
   PtSizingMode,
   ThinkingLevel,
@@ -434,7 +437,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
             <div className="flex items-center gap-2 type-body-sm">
               <span
                 className={
-                  avgLotPtUtil >= sim.avgBreakEvenUtilization
+                  avgLotPtUtil >= lotSim.breakEvenUtilization
                     ? 'md-delta-positive'
                     : 'md-delta-negative'
                 }
@@ -442,7 +445,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                 {formatPct(avgLotPtUtil, 1)} util
               </span>
               <span className="text-[var(--md-on-surface-variant)]">
-                vs {formatPct(sim.avgBreakEvenUtilization, 1)} break-even
+                vs {formatPct(lotSim.breakEvenUtilization, 1)} break-even
               </span>
             </div>
           </div>
@@ -731,7 +734,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                       <strong className="text-[var(--md-on-surface)]">
                         {formatPct(lotSim.realtimeRouting.ptUtilizationRate, 1)}
                       </strong>{' '}
-                      (break-even {formatPct(sim.avgBreakEvenUtilization, 1)})
+                      (break-even {formatPct(lotSim.breakEvenUtilization, 1)})
                     </span>
                   </div>
                 </div>
@@ -880,7 +883,12 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(
                     [
-                      { mode: 'OPTIMAL_TCO', label: 'Optimal TCO (~75% util)' },
+                      {
+                        mode: 'OPTIMAL_TCO',
+                        label: `Optimal TCO (≥${Math.round(
+                          lotSim.breakEvenUtilization * 100
+                        )}% util)`,
+                      },
                       { mode: 'MIN_FLOOR', label: '24/7 minimum floor' },
                       { mode: 'DAYTIME_FLOOR', label: 'Daytime floor' },
                       { mode: 'NONE', label: '0 GSUs (PayGo only)' },
@@ -1155,7 +1163,7 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                 </div>
               </div>
 
-              {/* 2B. Context Caching Hit Rate (-90%) */}
+              {/* 2B. Context Caching Hit Rate (-95% for Gemini 4 Argon, -90% for others) */}
               <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
                 <div className="flex items-start justify-between gap-2 tabular-nums">
                   <div>
@@ -1163,10 +1171,14 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                       htmlFor={`lot-cache-ratio-${selectedLot.id}`}
                       className="type-label-lg text-[var(--md-on-surface)]"
                     >
-                      Context caching hit rate (-90%)
+                      Context caching hit rate (
+                      {selectedLot.modelId === 'gemini-4-argon' ? '-95%' : '-90%'}
+                      )
                     </label>
                     <div className="type-body-sm text-[var(--md-on-surface-variant)]">
-                      Repeated prompt input served from memory at 90% discount
+                      Repeated prompt input served from memory at{' '}
+                      {selectedLot.modelId === 'gemini-4-argon' ? '95%' : '90%'}{' '}
+                      discount
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -1276,6 +1288,82 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
               </div>
             </div>
 
+            {/* 2D-0. Lot 1 Model Architecture Toggle (Gemini 4 Argon vs Gemini 3.8 Flash) */}
+            {selectedLot.id === 'lot1' && (
+              <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
+                <div>
+                  <div className="type-label-lg text-[var(--md-on-surface)]">
+                    Lot 1 frontier model architecture
+                  </div>
+                  <div className="type-body-sm text-[var(--md-on-surface-variant)]">
+                    Toggle Lot 1 between Gemini 4 Argon (default · 6.0× output burndown) and Gemini 3.8 Flash (5.0× output burndown)
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {(
+                    [
+                      {
+                        id: 'gemini-4-argon',
+                        label: 'Gemini 4 Argon (Default · 6.0× Out)',
+                      },
+                      {
+                        id: 'gemini-3.8-flash',
+                        label: 'Gemini 3.8 Flash (5.0× Out)',
+                      },
+                    ] as { id: Lot1ModelId; label: string }[]
+                  ).map((opt) => {
+                    const isSelected = selectedLot.modelId === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          const preset = LOT1_MODEL_PRESETS[opt.id];
+                          const share = selectedLot.googleShare ?? 1.0;
+                          onChangeLot({
+                            ...selectedLot,
+                            modelId: preset.modelId,
+                            shortName: preset.shortName,
+                            subtitle: preset.subtitle,
+                            modelDisplayName: formatLot1DisplayName(
+                              preset.modelId,
+                              selectedLot.thinkingLevel
+                            ),
+                            euPricesPer1M: { ...preset.euPricesPer1M },
+                            gsuSpec: structuredClone(preset.gsuSpec),
+                            manualGsus: {
+                              y1: Math.round(preset.manualGsus.y1 * share),
+                              y2: Math.round(preset.manualGsus.y2 * share),
+                              y3: Math.round(preset.manualGsus.y3 * share),
+                            },
+                          });
+                        }}
+                        aria-pressed={isSelected}
+                        className={`${
+                          isSelected
+                            ? 'md-chip-filter-selected'
+                            : 'md-chip-filter'
+                        } cursor-pointer`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-2 border-t border-[var(--md-outline-variant)] flex flex-wrap items-center justify-between gap-2 type-body-sm text-[var(--md-on-surface-variant)] tabular-nums">
+                  <span>
+                    GSU throughput: <strong className="text-[var(--md-on-surface)]">{selectedLot.gsuSpec.throughputPerGsuPerSec} tok/s</strong>
+                  </span>
+                  <span>
+                    Burndown: <strong className="text-[var(--md-on-surface)]">{selectedLot.gsuSpec.burndownWeights.inputNonCached.toFixed(1)}×</strong> In · <strong className="text-[var(--md-on-surface)]">{selectedLot.gsuSpec.burndownWeights.inputCached.toFixed(1)}×</strong> Cache · <strong className="text-[var(--md-on-surface)]">{selectedLot.gsuSpec.burndownWeights.outputTextAndThinking.toFixed(1)}×</strong> Out/Think · <strong className="text-[var(--md-on-surface)]">0.0×</strong> Cache Write
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* 2D. Thinking Level (Lots 1 & 2) or Image Tier (Lot 4) */}
             {(selectedLot.supportsThinkingLevel || selectedLot.id === 'lot4') && (
               <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2">
@@ -1373,6 +1461,15 @@ export const LotConfigurator: React.FC<LotConfiguratorProps> = ({
                               imageMix: opt.mix,
                               euPricesPer1M: specs.euPricesPer1M,
                               gsuSpec: specs.gsuSpec,
+                            });
+                          } else if (selectedLot.id === 'lot1') {
+                            onChangeLot({
+                              ...selectedLot,
+                              thinkingLevel: opt.lvl,
+                              modelDisplayName: formatLot1DisplayName(
+                                selectedLot.modelId,
+                                opt.lvl
+                              ),
                             });
                           } else {
                             onChangeLot({

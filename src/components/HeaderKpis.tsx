@@ -462,7 +462,9 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
               className="md-btn-tonal cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Optimize GSUs (~75% util)</span>
+              <span>
+                Optimize GSUs (≥{Math.round(avgBreakEvenUtil * 100)}% util)
+              </span>
             </button>
           </div>
         </div>

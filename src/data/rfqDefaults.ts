@@ -168,6 +168,102 @@ export function getLotEffectiveGsuMonthlyPriceUsd(
   return Number((listMonthly * (1 - ptDiscount)).toFixed(2));
 }
 
+export type Lot1ModelId = 'gemini-4-argon' | 'gemini-3.8-flash';
+
+export interface Lot1ModelPreset {
+  modelId: Lot1ModelId;
+  baseName: string;
+  shortName: string;
+  subtitle: string;
+  euPricesPer1M: {
+    inputNonCached: number;
+    inputCached: number;
+    outputTextAndThinking: number;
+  };
+  gsuSpec: {
+    throughputPerGsuPerSec: number;
+    burndownWeights: {
+      inputNonCached: number;
+      inputCached: number;
+      outputTextAndThinking: number;
+    };
+  };
+  manualGsus: {
+    y1: number;
+    y2: number;
+    y3: number;
+  };
+}
+
+/**
+ * Official & Internal Specifications for Lot 1 Model Options:
+ * - 'gemini-4-argon' (Default): Frontier / Pro-tier architecture (1.0x uncached in, 0.1x cached read,
+ *   6.0x output & thinking, 0.0x cache creation surcharge; $4.00/$0.20/$20.00 Global [-95% cache read] -> $4.40/$0.22/$22.00 EU;
+ *   260.0 burndown tok/s per GSU).
+ * - 'gemini-3.8-flash' (Toggle option): High-thinking Flash architecture (1.0x uncached in, 0.1x cached read,
+ *   5.0x output & thinking; $1.50/$0.15/$7.50 Global [-90% cache read] -> $1.65/$0.165/$8.25 EU; 675 burndown tok/s per GSU).
+ */
+export const LOT1_MODEL_PRESETS: Record<Lot1ModelId, Lot1ModelPreset> = {
+  'gemini-4-argon': {
+    modelId: 'gemini-4-argon',
+    baseName: 'Gemini 4 Argon',
+    shortName: 'Lot 1 (Gemini 4 Argon)',
+    subtitle:
+      'Complex reasoning & agentic workflows · Gemini 4 Argon (1.0× In · 0.1× Cache · 6.0× Out/Thinking)',
+    euPricesPer1M: {
+      inputNonCached: 4.40,         // $4.00 Global * 1.10 EU
+      inputCached: 0.22,            // $0.20 Global * 1.10 EU (95% discount off standard input; 0.1x GSU weight, 0.0x cache-write surcharge)
+      outputTextAndThinking: 22.00, // $20.00 Global * 1.10 EU (6.0x GSU weight)
+    },
+    gsuSpec: {
+      throughputPerGsuPerSec: 260, // Official GA 260.0 burndown tokens/sec per GSU for Gemini 4 Argon
+      burndownWeights: {
+        inputNonCached: 1.0,
+        inputCached: 0.1,
+        outputTextAndThinking: 6.0, // 6.0x output & thinking burndown multiplier
+      },
+    },
+    manualGsus: { y1: 37, y2: 61, y3: 89 },
+  },
+  'gemini-3.8-flash': {
+    modelId: 'gemini-3.8-flash',
+    baseName: 'Gemini 3.8 Flash',
+    shortName: 'Lot 1 (Gemini 3.8 Flash)',
+    subtitle:
+      'Complex reasoning & agentic workflows · Gemini 3.8 Flash (1.0× In · 0.1× Cache · 5.0× Out/Thinking)',
+    euPricesPer1M: {
+      inputNonCached: 1.65,        // $1.50 Global * 1.10 EU
+      inputCached: 0.165,          // $0.15 Global * 1.10 EU
+      outputTextAndThinking: 8.25, // $7.50 Global * 1.10 EU
+    },
+    gsuSpec: {
+      throughputPerGsuPerSec: 675, // Official 675 burndown tokens/sec per GSU for Gemini 3.8 Flash
+      burndownWeights: {
+        inputNonCached: 1.0,
+        inputCached: 0.1,
+        outputTextAndThinking: 5.0, // Official 1 output/thinking token = 5 burndown tokens
+      },
+    },
+    manualGsus: { y1: 12, y2: 20, y3: 29 },
+  },
+};
+
+export function formatLot1DisplayName(
+  modelId: string,
+  thinkingLevel: ThinkingLevel
+): string {
+  const preset =
+    LOT1_MODEL_PRESETS[modelId as Lot1ModelId] ??
+    LOT1_MODEL_PRESETS['gemini-4-argon'];
+  const levelLabel =
+    thinkingLevel === 'HIGH'
+      ? 'High Thinking'
+      : thinkingLevel === 'MEDIUM'
+      ? 'Medium Thinking'
+      : 'Low Thinking';
+  return `${preset.baseName} (${levelLabel})`;
+}
+
 /**
  * Helper to compute blended Lot 4 EU prices and GSU specs from the 3 Nano Banana image models
  * All in EU Multi-Region (+10% Non-Global uplift in USD)
@@ -247,17 +343,17 @@ const defaultLot4Mix = {
   textOutputShareOfOutput: 0.05,
 };
 const defaultLot4Specs = getLot4BlendedEuSpecs(defaultLot4Mix);
+const defaultLot1Preset = LOT1_MODEL_PRESETS['gemini-4-argon'];
 
 export const DEFAULT_LOTS: LotConfig[] = [
   {
     id: 'lot1',
     lotNumber: 1,
     name: 'Lot 1 · Frontier / Complex Reasoning',
-    shortName: 'Lot 1 (High Thinking)',
-    subtitle:
-      'Complex reasoning & agentic workflows · Upgraded from Gemini 3.1 Pro to Gemini 3.8 Flash (High Thinking)',
-    modelId: 'gemini-3.8-flash',
-    modelDisplayName: 'Gemini 3.8 Flash (High Thinking)',
+    shortName: defaultLot1Preset.shortName,
+    subtitle: defaultLot1Preset.subtitle,
+    modelId: defaultLot1Preset.modelId,
+    modelDisplayName: formatLot1DisplayName(defaultLot1Preset.modelId, 'HIGH'),
     endpointLocation: 'eu',
     region: 'eu (Europe Multi-Region · +10%)',
     volumesM: {
@@ -276,21 +372,10 @@ export const DEFAULT_LOTS: LotConfig[] = [
       MEDIUM: 0.40,
       HIGH: 0.85,
     },
-    euPricesPer1M: {
-      inputNonCached: 1.65,        // $1.50 Global * 1.10 EU
-      inputCached: 0.165,          // $0.15 Global * 1.10 EU
-      outputTextAndThinking: 8.25, // $7.50 Global * 1.10 EU
-    },
-    gsuSpec: {
-      throughputPerGsuPerSec: 675, // Official 675 burndown tokens/sec per GSU for Gemini 3.8 Flash
-      burndownWeights: {
-        inputNonCached: 1.0,
-        inputCached: 0.1,
-        outputTextAndThinking: 5.0, // Official 1 output/thinking token = 5 burndown tokens
-      },
-    },
+    euPricesPer1M: { ...defaultLot1Preset.euPricesPer1M },
+    gsuSpec: structuredClone(defaultLot1Preset.gsuSpec),
     ptSizingMode: 'MIN_FLOOR',
-    manualGsus: { y1: 12, y2: 20, y3: 29 },
+    manualGsus: { ...defaultLot1Preset.manualGsus },
   },
   {
     id: 'lot2',

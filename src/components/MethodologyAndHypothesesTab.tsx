@@ -311,6 +311,12 @@ export const MethodologyAndHypothesesTab: React.FC<
         <div className="p-4 bg-[var(--md-surface-container)] border-t border-[var(--md-outline-variant)] type-body-sm text-[var(--md-on-surface-variant)] space-y-1.5 tabular-nums">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>
+              <strong className="text-[var(--md-on-surface)]">Lot 1 Gemini 4 Argon (Default) &amp; toggle reference:</strong>{' '}
+              <strong>Gemini 4 Argon</strong> = $4.40 In / $0.22 Cache (-95%) / $22.00 Out &amp; Thinking in <code>eu</code> &amp; <code>us</code> (1.10×) or $4.00 / $0.20 (-95%) / $20.00 in <code>global</code> (1.00×) · 260 tok/s/GSU · Burndown: <code>1.0×</code> In, <code>0.1×</code> Cache Read, <code>6.0×</code> Out/Thinking, <code>0.0×</code> Cache Write surcharge.
+            </span>
+          </div>
+          <div className="pt-1 border-t border-[var(--md-outline-variant)] flex flex-wrap items-center justify-between gap-2">
+            <span>
               <strong className="text-[var(--md-on-surface)]">Lot 4 Nano Banana 2 image tier reference:</strong>{' '}
               <strong>NB2 (Default · Gemini 3.1 Flash Image)</strong> = $66.00/1M Image Out in <code>eu</code> &amp; <code>us</code> (1.10×) or $60.00/1M in <code>global</code> (1.00×) · 1,120 tokens per 1K image · 2,015 tok/s/GSU.
             </span>
@@ -320,8 +326,8 @@ export const MethodologyAndHypothesesTab: React.FC<
           </div>
           <div className="pt-1 border-t border-[var(--md-outline-variant)] flex flex-wrap items-center justify-between gap-2">
             <span>
-              <strong className="text-[var(--md-on-surface)]">Gemini 3.8 Flash 2027–2029 rate schedule:</strong>{' '}
-              $1.50 In / $0.15 Cache / $7.50 Out (<code>global</code> 1.00×) and $1.65 In / $0.165 Cache / $8.25 Out (<code>eu</code> &amp; <code>us</code> 1.10×) starting January 1, 2027.
+              <strong className="text-[var(--md-on-surface)]">Gemini 3.8 Flash 2027–2029 rate schedule (Lot 1 toggle &amp; Lot 2):</strong>{' '}
+              $1.50 In / $0.15 Cache / $7.50 Out (<code>global</code> 1.00×) and $1.65 In / $0.165 Cache / $8.25 Out (<code>eu</code> &amp; <code>us</code> 1.10×) · 675 tok/s/GSU · <code>1.0× : 0.1× : 5.0×</code> burndown.
             </span>
             <span>
               <strong className="text-[var(--md-on-surface)]">Official PT SKU IDs:</strong>{' '}
@@ -588,8 +594,8 @@ export const MethodologyAndHypothesesTab: React.FC<
                 </code>
               </div>
               <div className="text-[var(--md-primary)]">
-                Live Break-Even Utilization ({activeTierLabel}):{' '}
-                <strong>{formatPct(sim.avgBreakEvenUtilization, 1)}</strong> (GSU annual cost:{' '}
+                Live Break-Even Utilization ({exLot.shortName}, {activeTierLabel}):{' '}
+                <strong>{formatPct(exSim.breakEvenUtilization, 1)}</strong> (GSU annual cost:{' '}
                 {formatCurrencyExact(gsuAnnual)}/yr)
               </div>
             </div>

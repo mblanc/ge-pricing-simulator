@@ -21,8 +21,8 @@ Success means giving both Google Cloud and Orange decision-makers immediate, tra
 
 Unlike the static RFQ Excel price grid—which only calculates flat 100% PayGo on legacy model mappings without hourly seasonality or capacity commitments—this simulator natively models:
 - **168-hour (5 Weekday × 24h + 2 Weekend × 24h) B2C chatbot seasonality** against horizontal Provisioned Throughput GSU capacity ceilings.
-- **Exact Vertex AI `eu` GSU burndown math**: `675 tok/s` for `Gemini 3.8 Flash` (`1.0` input / `0.1` cached / `5.0` output & thinking), `3,360 tok/s` for `Gemini 3.5 Flash-Lite` (`1.0` / `0.1` / `9.0`), and weighted image generation burndown for the `Nano Banana 2` suite (`Lot 4`).
-- **Closed-form TCO optimization**: Instant sizing presets for **Strict Minimum Traffic Floor (100% GSU utilization, 0% waste)**, **Daytime Base-Load Floor (08:00–22:00)**, and **Cost-Optimal TCO Break-Even (~75.2% GSU utilization)**, plus Lot 1 + Lot 2 `eu` GSU pooling.
+- **Exact Vertex AI `eu` GSU burndown math**: `260 tok/s` for `Gemini 4 Argon` (`1.0` input / `0.1` cached read / `6.0` output & thinking / `0.0` cache write surcharge; default for Lot 1, with 1-click UI toggle to `Gemini 3.8 Flash`), `675 tok/s` for `Gemini 3.8 Flash` (`1.0` input / `0.1` cached / `5.0` output & thinking), `3,360 tok/s` for `Gemini 3.5 Flash-Lite` (`1.0` / `0.1` / `9.0`), and weighted image generation burndown for the `Nano Banana 2` suite (`Lot 4`).
+- **Closed-form TCO optimization**: Instant sizing presets for **Strict Minimum Traffic Floor (100% GSU utilization, 0% waste)**, **Daytime Base-Load Floor (08:00–22:00)**, and **Cost-Optimal TCO Break-Even (~75% GSU utilization)**, plus Lot 1 + Lot 2 `eu` GSU pooling.
 
 ## Operating Context
 
@@ -34,9 +34,9 @@ Unlike the static RFQ Excel price grid—which only calculates flat 100% PayGo o
 - **Strictly Locked Official `eu` Multi-Region SKU & GSU Math**:
   - All pricing is strictly in **USD (`$`)** on the **`eu` multi-region endpoint** (+10% non-global official Google Cloud SKU list prices; `1-Year` `eu` GSU = `$2,200/GSU/month`, `1-Month` `eu` GSU = `$2,970/GSU/month`).
   - Priority PayGo retry spillover is strictly billed at **`1.8×`** `eu` Standard PayGo rates, and Batch API workloads are carved out prior to real-time GSU routing at **`0.5×`** Standard PayGo rates.
-  - Thinking tokens (`Gemini 3.8 Flash` in Lots 1 & 2) are billed and burned at the Output token rate (`$8.25/1M` in `eu`) and Output burndown weight (`5.0×`).
+  - Thinking tokens (`Gemini 4 Argon` in Lot 1 default and `Gemini 3.8 Flash` in Lot 1 toggle & Lot 2) are billed and burned at the model's Output token rate (`$22.00/1M` for Argon in `eu` / `$20.00/1M` in `global`, `$8.25/1M` for 3.8 Flash in `eu`) and Output burndown weight (`6.0×` for Argon, `5.0×` for 3.8 Flash).
 - **Interactive Scenario Overrides**:
-  - Users can dynamically adjust 3-year token volumes, Input/Output splits, Thinking Levels (`HIGH`, `MEDIUM`, `LOW`) and thinking ratios, Volume Envelope mode (`Add on top` vs. `Keep total RFQ volume fixed`), Cache Hit %, Batch %, diurnal trough floor, weekend traffic ratio, `429` Priority PayGo retry %, Lot 1+2 GSU pooling, PT sizing modes, and 1Y/3Y FSP commit discount rates.
+  - Users can dynamically toggle Lot 1 between **Gemini 4 Argon (Default)** and **Gemini 3.8 Flash**, and adjust 3-year token volumes, Input/Output splits, Thinking Levels (`HIGH`, `MEDIUM`, `LOW`) and thinking ratios, Volume Envelope mode (`Add on top` vs. `Keep total RFQ volume fixed`), Cache Hit %, Batch %, diurnal trough floor, weekend traffic ratio, `429` Priority PayGo retry %, Lot 1+2 GSU pooling, PT sizing modes, and 1Y/3Y FSP commit discount rates.
   - Includes a 1-click **Reset to Orange RFQ Defaults** action to restore the exact baseline RFQ state at any time.
 - **100% Client-Side Architecture**:
   - Zero backend or database dependencies (React 19 + TypeScript + Vite + Tailwind CSS v4) so the tool runs deterministically in any browser and can be shared or hosted as a self-contained bundle.

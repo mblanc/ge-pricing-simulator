@@ -42,6 +42,8 @@ export interface YearLotSimulationResult {
   peakHourlyGsuDemand: number;
   /** Provisioned GSUs allocated to this Lot (or share of pool) */
   provisionedGsus: number;
+  /** Break-even GSU utilization rate (0..1) for this lot's model and endpoint */
+  breakEvenUtilization: number;
   /** Monthly GSU ramp range within this year (e.g. M1..M12 in SMOOTH_MONTHLY mode) */
   minMonthlyGsus: number;
   maxMonthlyGsus: number;
@@ -418,6 +420,7 @@ export function runFullSimulation(
     yearKey: YearKey;
     yearNumber: 2027 | 2028 | 2029;
     lotGsuAnnualCostUsd: number;
+    breakEvenUtilization: number;
     totalTokensM: number;
     batchTokensM: number;
     realtimeTokensM: number;
@@ -575,12 +578,18 @@ export function runFullSimulation(
           : 0;
       const annualPayGoValuePerFullGsuUsd =
         tokensPerGsuPerYearM * blendedStandardPayGoPricePer1M;
+      const breakEvenUtilization = Math.min(
+        1.0,
+        lotGsuAnnualCostUsd /
+          Math.max(1, annualPayGoValuePerFullGsuUsd * effectiveOverflowMult)
+      );
 
       precalcMap[lot.id][yr.key] = {
         lot,
         yearKey: yr.key,
         yearNumber: yr.num,
         lotGsuAnnualCostUsd,
+        breakEvenUtilization,
         totalTokensM,
         batchTokensM,
         realtimeTokensM,
@@ -605,14 +614,7 @@ export function runFullSimulation(
   }
 
   // Average break-even utilization across Lot 2 (using Lot 2's active endpoint location)
-  const avgBreakEvenUtilization = Math.min(
-    1.0,
-    precalcMap.lot2.y1.lotGsuAnnualCostUsd /
-      Math.max(
-        1,
-        precalcMap.lot2.y1.annualPayGoValuePerFullGsuUsd * effectiveOverflowMult
-      )
-  );
+  const avgBreakEvenUtilization = precalcMap.lot2.y1.breakEvenUtilization;
 
   // Step 2: Calculate PT GSU sizing & 36-month ramp routing (handling Lot 1 + Lot 2 pooling if enabled)
   const activeRampMode = globalConfig.capacityRampMode ?? 'SMOOTH_MONTHLY';
@@ -1055,6 +1057,7 @@ export function runFullSimulation(
         optimalTcoGsuDemand: sizing.optimalTcoGsus,
         peakHourlyGsuDemand: sizing.peakGsus,
         provisionedGsus,
+        breakEvenUtilization: p.breakEvenUtilization,
         minMonthlyGsus,
         maxMonthlyGsus,
         routingSharesOfTotal: {
