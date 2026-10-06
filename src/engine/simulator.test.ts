@@ -353,4 +353,66 @@ describe('Gemini Enterprise EU Pricing & PT Simulator Engine', () => {
       4
     );
   });
+
+  it('supports per-lot consumption and traffic hypothesis overrides and aggregates allLotsHourlyByYear (168h)', () => {
+    const baseOut = runFullSimulation(DEFAULT_LOTS, DEFAULT_GLOBAL_CONFIG);
+
+    // Verify allLotsHourlyByYear has 168 points and equals the sum of all 4 lots
+    expect(baseOut.allLotsHourlyByYear.y1).toHaveLength(168);
+    const h0SumDemand = DEFAULT_LOTS.reduce(
+      (acc, l) =>
+        acc + baseOut.hourlyByLotAndYear[l.id].y1[0].totalDemandGsus,
+      0
+    );
+    expect(baseOut.allLotsHourlyByYear.y1[0].totalDemandGsus).toBeCloseTo(
+      h0SumDemand,
+      4
+    );
+
+    // Override Lot 1 with 1_MONTH GSU commit term, 50% Priority PayGo overflow, KEEP_TOTAL_FIXED thinking envelope, and flat 24/7 seasonality
+    const customLots = DEFAULT_LOTS.map((l) =>
+      l.id === 'lot1'
+        ? {
+            ...l,
+            gsuCommitTerm: '1_MONTH' as const,
+            payGoRetryToPriorityRatio: 0.5,
+            thinkingEnvelopeMode: 'FIXED_TOTAL' as const,
+            seasonality: {
+              preset: 'FLAT_24_7' as const,
+              nighttimeFloorRatio: 1.0,
+              weekendToWeekdayRatio: 1.0,
+              peakAmplitude: 1.0,
+            },
+          }
+        : l
+    );
+
+    const customOut = runFullSimulation(customLots, DEFAULT_GLOBAL_CONFIG);
+
+    // Lot 1 with flat 1.0 seasonality has identical hourly GSU demand at 03:00 and 12:00
+    expect(
+      customOut.hourlyByLotAndYear.lot1.y1[3].totalDemandGsus
+    ).toBeCloseTo(
+      customOut.hourlyByLotAndYear.lot1.y1[12].totalDemandGsus,
+      4
+    );
+    expect(customOut.byLotAndYear.lot1.y1.minHourlyGsuDemand).toBe(
+      Math.floor(customOut.byLotAndYear.lot1.y1.avgGsuDemand)
+    );
+
+    // Lot 2 remains completely unaffected by Lot 1's per-lot overrides
+    expect(customOut.byLotAndYear.lot2.y1.peakHourlyGsuDemand).toBeCloseTo(
+      baseOut.byLotAndYear.lot2.y1.peakHourlyGsuDemand,
+      4
+    );
+    expect(
+      customOut.byLotAndYear.lot2.y1.annualCostsFspUsd.threeYearFsp
+        .hybridTotalUsd
+    ).toBeCloseTo(
+      baseOut.byLotAndYear.lot2.y1.annualCostsFspUsd.threeYearFsp
+        .hybridTotalUsd,
+      2
+    );
+  });
 });
+

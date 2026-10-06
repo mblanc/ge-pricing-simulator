@@ -4,6 +4,14 @@ export type GsuCommitTerm = '1_MONTH' | '3_MONTH' | '1_YEAR';
 export type ThinkingEnvelopeMode = 'ADD_ON_TOP' | 'FIXED_TOTAL';
 export type EndpointLocation = 'global' | 'eu' | 'us';
 export type CapacityRampMode = 'SMOOTH_MONTHLY' | 'ANNUAL_STEPS';
+export type SeasonalityPreset = 'PUBLIC_CONSUMER_BOT' | 'B2B_CUSTOMER_CARE' | 'FLAT_24_7';
+
+export interface SeasonalityConfig {
+  preset: SeasonalityPreset;
+  nighttimeFloorRatio: number;
+  weekendToWeekdayRatio: number;
+  peakAmplitude: number;
+}
 
 export interface LotConfig {
   id: 'lot1' | 'lot2' | 'lot3' | 'lot4';
@@ -29,6 +37,16 @@ export interface LotConfig {
   cacheRatio: number;
   /** Percentage of total workload executed via Batch API (-50% PayGo, not on PT) */
   batchRatio: number;
+  /** Optional per-lot override for Priority PayGo (1.8x) share of PayGo overflow (0..1) */
+  payGoRetryToPriorityRatio?: number;
+  /** Optional per-lot override for GSU Commit Term (1_MONTH, 3_MONTH, 1_YEAR) */
+  gsuCommitTerm?: GsuCommitTerm;
+  /** Optional per-lot override for 36-month GSU capacity ramp mode */
+  capacityRampMode?: CapacityRampMode;
+  /** Optional per-lot override for how Thinking Level affects token volume */
+  thinkingEnvelopeMode?: ThinkingEnvelopeMode;
+  /** Optional per-lot override for 168-hour traffic seasonality */
+  seasonality?: SeasonalityConfig;
   /** Thinking configuration for Gemini 3.8 Flash (Lots 1 & 2) */
   supportsThinkingLevel: boolean;
   thinkingLevel: ThinkingLevel;
@@ -83,12 +101,7 @@ export interface GlobalSimConfig {
   /** 36-month Provisioned Throughput GSU ramping mode: progressive monthly ramp (M1–M36) vs 3 flat annual steps (Y1/Y2/Y3) */
   capacityRampMode?: CapacityRampMode;
   /** Seasonality parameters for Public General Bot (24h x 7d) */
-  seasonality: {
-    preset: 'PUBLIC_CONSUMER_BOT' | 'B2B_CUSTOMER_CARE' | 'FLAT_24_7';
-    nighttimeFloorRatio: number;
-    weekendToWeekdayRatio: number;
-    peakAmplitude: number;
-  };
+  seasonality: SeasonalityConfig;
   /** Commercial Discount percentages: PayGo FSP tiers (Option A/B/C) and Provisioned Throughput (PT GSU) discount */
   fspDiscounts: {
     uncommittedDiscount?: number;    // default 0.0 (Option A PayGo discount %)

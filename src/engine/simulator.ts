@@ -1,5 +1,4 @@
 import {
-  EU_GSU_MONTHLY_PRICE_USD,
   GlobalSimConfig,
   LotConfig,
   PtSizingMode,
@@ -174,6 +173,7 @@ export interface FullSimulationOutput {
   avgBreakEvenUtilization: number;
   byLotAndYear: Record<LotConfig['id'], Record<YearKey, YearLotSimulationResult>>;
   pooledLot1And2HourlyByYear: Record<YearKey, HourlyChartSeriesPoint[]>;
+  allLotsHourlyByYear: Record<YearKey, HourlyChartSeriesPoint[]>;
   hourlyByLotAndYear: Record<LotConfig['id'], Record<YearKey, HourlyChartSeriesPoint[]>>;
   monthlyByLot: Record<LotConfig['id'], MonthlySimulationPoint[]>;
   monthlyTotals: MonthlySimulationPoint[];
@@ -397,16 +397,7 @@ export function runFullSimulation(
 
   const ptDiscountRate = globalConfig.fspDiscounts.ptDiscount ?? 0;
   const weeklyProfile = generateWeeklyTrafficProfile(globalConfig.seasonality);
-  const gsuMonthlyPrice =
-    EU_GSU_MONTHLY_PRICE_USD[globalConfig.gsuCommitTerm] * (1 - ptDiscountRate);
-  const gsuAnnualCostUsd = gsuMonthlyPrice * 12;
-  const retryRatio = globalConfig.payGoRetryToPriorityRatio;
   const prioMult = globalConfig.priorityPayGoMultiplier;
-  // Since FSP discounts PayGo/Priority by (1 - activeFspDiscountRate) while PT GSU is discounted by ptDiscountRate,
-  // the effective PayGo overflow value that 1 GSU replaces is scaled by (1 - activeFspDiscountRate):
-  const effectiveOverflowMult =
-    ((1 - retryRatio) * 1.0 + retryRatio * prioMult) *
-    (1 - activeFspDiscountRate);
 
   const years: { key: YearKey; num: 2027 | 2028 | 2029 }[] = [
     { key: 'y1', num: 2027 },
@@ -419,6 +410,10 @@ export function runFullSimulation(
     lot: LotConfig;
     yearKey: YearKey;
     yearNumber: 2027 | 2028 | 2029;
+    lotWeeklyProfile: HourlyTrafficPoint[];
+    lotRetryRatio: number;
+    lotEffectiveOverflowMult: number;
+    lotRampMode: 'SMOOTH_MONTHLY' | 'ANNUAL_STEPS';
     lotGsuAnnualCostUsd: number;
     breakEvenUtilization: number;
     totalTokensM: number;
@@ -445,9 +440,23 @@ export function runFullSimulation(
 
   for (const lot of lots) {
     const effectivePrices = getLotEffectivePricesPer1M(lot);
+    const lotCommitTerm = lot.gsuCommitTerm ?? globalConfig.gsuCommitTerm;
+    const lotRetryRatio =
+      lot.payGoRetryToPriorityRatio ?? globalConfig.payGoRetryToPriorityRatio;
+    const lotThinkingEnvelope =
+      lot.thinkingEnvelopeMode ?? globalConfig.thinkingEnvelopeMode;
+    const lotRampMode =
+      lot.capacityRampMode ?? globalConfig.capacityRampMode ?? 'SMOOTH_MONTHLY';
+    const lotSeasonality = lot.seasonality ?? globalConfig.seasonality;
+    const lotWeeklyProfile = generateWeeklyTrafficProfile(lotSeasonality);
+
+    const lotEffectiveOverflowMult =
+      ((1 - lotRetryRatio) * 1.0 + lotRetryRatio * prioMult) *
+      (1 - activeFspDiscountRate);
+
     const lotGsuMonthlyPriceUsd = getLotEffectiveGsuMonthlyPriceUsd(
       lot,
-      globalConfig.gsuCommitTerm,
+      lotCommitTerm,
       ptDiscountRate
     );
     const lotGsuAnnualCostUsd = lotGsuMonthlyPriceUsd * 12;
@@ -475,7 +484,7 @@ export function runFullSimulation(
 
       if (lot.supportsThinkingLevel) {
         const thinkMult = lot.thinkingMultiplierByLevel[lot.thinkingLevel] ?? 0;
-        if (globalConfig.thinkingEnvelopeMode === 'ADD_ON_TOP') {
+        if (lotThinkingEnvelope === 'ADD_ON_TOP') {
           thinkingTokensIncludedM = baseVisibleOutputM * thinkMult;
           effectiveOutputTextAndThinkingM = baseVisibleOutputM + thinkingTokensIncludedM;
           refOutputTextAndThinkingM = refBaseVisibleOutputM * (1 + thinkMult);
@@ -568,7 +577,9 @@ export function runFullSimulation(
       const avgGsuDemand =
         avgBurndownTokensPerSec / lot.gsuSpec.throughputPerGsuPerSec;
 
-      const hourlyDemandGsus = weeklyProfile.map((pt) => avgGsuDemand * pt.weight);
+      const hourlyDemandGsus = lotWeeklyProfile.map(
+        (pt) => avgGsuDemand * pt.weight
+      );
 
       const burndownTokensPerGsuPerYearM =
         (lot.gsuSpec.throughputPerGsuPerSec * SECONDS_PER_YEAR) / 1_000_000;
@@ -581,13 +592,17 @@ export function runFullSimulation(
       const breakEvenUtilization = Math.min(
         1.0,
         lotGsuAnnualCostUsd /
-          Math.max(1, annualPayGoValuePerFullGsuUsd * effectiveOverflowMult)
+          Math.max(1, annualPayGoValuePerFullGsuUsd * lotEffectiveOverflowMult)
       );
 
       precalcMap[lot.id][yr.key] = {
         lot,
         yearKey: yr.key,
         yearNumber: yr.num,
+        lotWeeklyProfile,
+        lotRetryRatio,
+        lotEffectiveOverflowMult,
+        lotRampMode,
         lotGsuAnnualCostUsd,
         breakEvenUtilization,
         totalTokensM,
@@ -617,7 +632,6 @@ export function runFullSimulation(
   const avgBreakEvenUtilization = precalcMap.lot2.y1.breakEvenUtilization;
 
   // Step 2: Calculate PT GSU sizing & 36-month ramp routing (handling Lot 1 + Lot 2 pooling if enabled)
-  const activeRampMode = globalConfig.capacityRampMode ?? 'SMOOTH_MONTHLY';
   const MONTH_NAMES = [
     'Jan',
     'Feb',
@@ -725,6 +739,11 @@ export function runFullSimulation(
     y2: [],
     y3: [],
   };
+  const allLotsHourlyByYear: FullSimulationOutput['allLotsHourlyByYear'] = {
+    y1: [],
+    y2: [],
+    y3: [],
+  };
   const monthlyByLot: FullSimulationOutput['monthlyByLot'] = {
     lot1: [],
     lot2: [],
@@ -743,12 +762,12 @@ export function runFullSimulation(
       const p = precalcMap[lot.id][yr.key];
       lotSizings[lot.id] = selectGsuCapacityForProfile(
         p.hourlyDemandGsus,
-        weeklyProfile,
+        p.lotWeeklyProfile,
         lot.ptSizingMode,
         lot.manualGsus[yr.key],
         p.lotGsuAnnualCostUsd,
         p.annualPayGoValuePerFullGsuUsd,
-        effectiveOverflowMult
+        p.lotEffectiveOverflowMult
       );
     }
 
@@ -762,9 +781,9 @@ export function runFullSimulation(
       lotSizings.lot1.selectedGsus + lotSizings.lot2.selectedGsus;
     const pooledEval12 = evaluateHourlyCoverage(
       combinedDemand12,
-      weeklyProfile,
+      p1.lotWeeklyProfile,
       combinedGsus12,
-      retryRatio
+      p1.lotRetryRatio
     );
     pooledLot1And2HourlyByYear[yr.key] = pooledEval12.series;
 
@@ -776,15 +795,16 @@ export function runFullSimulation(
         sizing.selectedGsus,
         multipliers
       );
+      const activeRampMode = p.lotRampMode;
 
       const isPooled12 =
         globalConfig.poolLot1AndLot2Gsus && (lot.id === 'lot1' || lot.id === 'lot2');
 
       const individualEval = evaluateHourlyCoverage(
         p.hourlyDemandGsus,
-        weeklyProfile,
+        p.lotWeeklyProfile,
         sizing.selectedGsus,
-        retryRatio
+        p.lotRetryRatio
       );
       hourlyByLotAndYear[lot.id][yr.key] = individualEval.series;
 
@@ -824,17 +844,17 @@ export function runFullSimulation(
           ? baseAnnualEval
           : evaluateHourlyCoverage(
               mHourlyDemand,
-              weeklyProfile,
+              p.lotWeeklyProfile,
               smoothGsus,
-              retryRatio
+              p.lotRetryRatio
             );
         const evalStep = isPooled12
           ? baseAnnualEval
           : evaluateHourlyCoverage(
               mHourlyDemand,
-              weeklyProfile,
+              p.lotWeeklyProfile,
               stepGsus,
-              retryRatio
+              p.lotRetryRatio
             );
 
         smoothWeightedPtCoveredTokensM +=
@@ -1007,7 +1027,7 @@ export function runFullSimulation(
         p.realtimeFullStandardPayGoCostUsd + batchCostUsd;
       const payGoWithPriorityRetryCostUsd =
         p.realtimeFullStandardPayGoCostUsd *
-          ((1 - retryRatio) * 1.0 + retryRatio * prioMult) +
+          ((1 - p.lotRetryRatio) * 1.0 + p.lotRetryRatio * prioMult) +
         batchCostUsd;
 
       // IMPORTANT: Provisioned Throughput (GSU subscription commit) is NEVER discounted by FSP!
@@ -1094,6 +1114,53 @@ export function runFullSimulation(
         },
       };
     }
+
+    // Build all-4-lots combined 168-hour GSU series for this year
+    const s1 = hourlyByLotAndYear.lot1[yr.key];
+    const s2 = hourlyByLotAndYear.lot2[yr.key];
+    const s3 = hourlyByLotAndYear.lot3[yr.key];
+    const s4 = hourlyByLotAndYear.lot4[yr.key];
+    allLotsHourlyByYear[yr.key] = s1.map((pt1, idx) => {
+      const pt2 = s2[idx];
+      const pt3 = s3[idx];
+      const pt4 = s4[idx];
+      return {
+        hourIndex: pt1.hourIndex,
+        dayName: pt1.dayName,
+        hourOfDay: pt1.hourOfDay,
+        isWeekend: pt1.isWeekend,
+        totalDemandGsus:
+          pt1.totalDemandGsus +
+          pt2.totalDemandGsus +
+          pt3.totalDemandGsus +
+          pt4.totalDemandGsus,
+        ptCeilingGsus:
+          pt1.ptCeilingGsus +
+          pt2.ptCeilingGsus +
+          pt3.ptCeilingGsus +
+          pt4.ptCeilingGsus,
+        ptCoveredGsus:
+          pt1.ptCoveredGsus +
+          pt2.ptCoveredGsus +
+          pt3.ptCoveredGsus +
+          pt4.ptCoveredGsus,
+        unusedPtGsus:
+          pt1.unusedPtGsus +
+          pt2.unusedPtGsus +
+          pt3.unusedPtGsus +
+          pt4.unusedPtGsus,
+        standardPayGoSpilloverGsus:
+          pt1.standardPayGoSpilloverGsus +
+          pt2.standardPayGoSpilloverGsus +
+          pt3.standardPayGoSpilloverGsus +
+          pt4.standardPayGoSpilloverGsus,
+        priorityPayGoRetryGsus:
+          pt1.priorityPayGoRetryGsus +
+          pt2.priorityPayGoRetryGsus +
+          pt3.priorityPayGoRetryGsus +
+          pt4.priorityPayGoRetryGsus,
+      };
+    });
   }
 
   // Build 36-month combined series across all 4 lots (monthlyTotals)
@@ -1346,6 +1413,7 @@ export function runFullSimulation(
     avgBreakEvenUtilization,
     byLotAndYear,
     pooledLot1And2HourlyByYear,
+    allLotsHourlyByYear,
     hourlyByLotAndYear,
     monthlyByLot,
     monthlyTotals,

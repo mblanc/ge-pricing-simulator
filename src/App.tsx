@@ -7,7 +7,6 @@ import {
   Download,
   Upload,
   LayoutDashboard,
-  Layers,
   Calendar,
   Info,
   BookOpen,
@@ -21,11 +20,10 @@ import {
 } from './data/rfqDefaults';
 import { runFullSimulation, YearKey } from './engine/simulator';
 import { SelectedKpiId } from './components/HeaderKpis';
-import { GlobalSimulationTab } from './components/GlobalSimulationTab';
-import { LotConfigurator } from './components/LotConfigurator';
+import { UnifiedSimulatorView } from './components/UnifiedSimulatorView';
 import { MethodologyAndHypothesesTab } from './components/MethodologyAndHypothesesTab';
 
-type PrimaryTabId = 'global' | 'lots' | 'hypotheses';
+type PrimaryTabId = 'simulator' | 'hypotheses';
 
 export function App() {
   const [lots, setLots] = useState<LotConfig[]>(() =>
@@ -39,7 +37,7 @@ export function App() {
   >('threeYearFsp');
   const [selectedYear, setSelectedYear] = useState<YearKey>('y1');
   const [selectedKpi, setSelectedKpi] = useState<SelectedKpiId>('tco');
-  const [activeTab, setActiveTab] = useState<PrimaryTabId>('global');
+  const [activeTab, setActiveTab] = useState<PrimaryTabId>('simulator');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [jsonToast, setJsonToast] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,15 +153,10 @@ export function App() {
       subtitle: string;
     }
   > = {
-    global: {
-      title: 'Global simulation — 3-year TCO (all 4 lots combined)',
+    simulator: {
+      title: 'TCO & capacity simulator — Global portfolio or per-lot tuning',
       subtitle:
-        'Company-wide 36-month cost results on top, followed by global commercial & capacity variables below that update all 4 lots simultaneously.',
-    },
-    lots: {
-      title: 'Per-lot simulation — Individual lot results & fine-tuning (Lots 1–4)',
-      subtitle:
-        'Select any workload lot below to inspect its dedicated 3-year TCO and adjust its specific capacity, endpoint, or tokenomics levers.',
+        'Select All 4 lots (Global) or any individual workload lot below. Model consumption options and future traffic hypotheses are grouped in the same two places across every scope.',
     },
     hypotheses: {
       title: 'Hypotheses, official SKU pricing & calculation methodology',
@@ -305,7 +298,7 @@ export function App() {
           </p>
         </div>
 
-        {/* Primary 3-Tab Switcher Header: Global | Per-Lot | Hypotheses */}
+        {/* Primary 2-Tab Switcher Header: Simulator | Hypotheses & pricing */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="type-headline-sm text-[var(--md-on-surface)]">
@@ -316,7 +309,7 @@ export function App() {
             </p>
           </div>
 
-          {/* 3-Tab Segmented Navigation Bar */}
+          {/* 2-Tab Segmented Navigation Bar */}
           <div
             role="tablist"
             aria-label="Primary application views"
@@ -325,31 +318,16 @@ export function App() {
             <button
               type="button"
               role="tab"
-              aria-selected={activeTab === 'global'}
-              onClick={() => setActiveTab('global')}
+              aria-selected={activeTab === 'simulator'}
+              onClick={() => setActiveTab('simulator')}
               className={`h-[40px] px-5 rounded-full type-label-lg flex items-center gap-2 cursor-pointer transition-colors ${
-                activeTab === 'global'
+                activeTab === 'simulator'
                   ? 'bg-[var(--md-primary)] text-[var(--md-on-primary)]'
                   : 'text-[var(--md-on-surface-variant)] hover:text-[var(--md-on-surface)]'
               }`}
             >
               <LayoutDashboard className="w-4 h-4" />
-              <span>Global</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'lots'}
-              onClick={() => setActiveTab('lots')}
-              className={`h-[40px] px-5 rounded-full type-label-lg flex items-center gap-2 cursor-pointer transition-colors ${
-                activeTab === 'lots'
-                  ? 'bg-[var(--md-primary)] text-[var(--md-on-primary)]'
-                  : 'text-[var(--md-on-surface-variant)] hover:text-[var(--md-on-surface)]'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              <span>Per-lot (Lots 1–4)</span>
+              <span>Simulator</span>
             </button>
 
             <button
@@ -370,9 +348,10 @@ export function App() {
         </div>
 
         {/* Active Tab Content */}
-        {activeTab === 'global' && (
-          <GlobalSimulationTab
+        {activeTab === 'simulator' && (
+          <UnifiedSimulatorView
             lots={lots}
+            onChangeLot={handleChangeLot}
             onChangeAllLots={setLots}
             globalConfig={globalConfig}
             onChangeGlobalConfig={setGlobalConfig}
@@ -385,20 +364,6 @@ export function App() {
             sim={sim}
             onApplyGlobalPtMode={handleApplyGlobalPtMode}
             currentGlobalPtMode={currentGlobalPtMode}
-          />
-        )}
-
-        {activeTab === 'lots' && (
-          <LotConfigurator
-            lots={lots}
-            onChangeLot={handleChangeLot}
-            onChangeAllLots={setLots}
-            globalConfig={globalConfig}
-            onChangeGlobalConfig={setGlobalConfig}
-            sim={sim}
-            selectedYear={selectedYear}
-            onSelectYear={setSelectedYear}
-            activeFspTier={activeFspTier}
           />
         )}
 

@@ -26,7 +26,7 @@ interface TrafficSeasonalityChartProps {
   selectedYear: YearKey;
   onSelectYear: (yr: YearKey) => void;
   selectedKpi?: SelectedKpiId;
-  lockedScope?: 'lot1' | 'lot2' | 'lot3' | 'lot4';
+  lockedScope?: 'all' | 'lot1' | 'lot2' | 'lot3' | 'lot4';
   embedded?: boolean;
 }
 
@@ -43,14 +43,16 @@ export const TrafficSeasonalityChart: React.FC<TrafficSeasonalityChartProps> = (
   embedded = false,
 }) => {
   const [internalScope, setInternalScope] = useState<
-    'lot1' | 'lot2' | 'lot3' | 'lot4'
-  >('lot1');
+    'all' | 'lot1' | 'lot2' | 'lot3' | 'lot4'
+  >('all');
   const [hoverHour, setHoverHour] = useState<number | null>(null);
 
   const activeScope = lockedScope ?? internalScope;
 
   const series: HourlyChartSeriesPoint[] =
-    sim.hourlyByLotAndYear[activeScope][selectedYear];
+    activeScope === 'all'
+      ? sim.allLotsHourlyByYear[selectedYear]
+      : sim.hourlyByLotAndYear[activeScope][selectedYear];
 
   const maxDemand = Math.max(
     10,
@@ -60,6 +62,48 @@ export const TrafficSeasonalityChart: React.FC<TrafficSeasonalityChartProps> = (
   const ptCeiling = series[0]?.ptCeilingGsus ?? 0;
 
   const currentRes = (() => {
+    if (activeScope === 'all') {
+      const lotIds = ['lot1', 'lot2', 'lot3', 'lot4'] as const;
+      let minFloor = 0;
+      let daytimeFloor = 0;
+      let optimalTco = 0;
+      let peak = 0;
+      let provisioned = 0;
+      let weightedPtCov = 0;
+      let weightedStdSpill = 0;
+      let weightedPrioSpill = 0;
+      let totalRtTokens = 0;
+
+      for (const lid of lotIds) {
+        const r = sim.byLotAndYear[lid][selectedYear];
+        minFloor += r.minHourlyGsuDemand;
+        daytimeFloor += r.daytimeFloorGsuDemand;
+        optimalTco += r.optimalTcoGsuDemand;
+        peak += r.peakHourlyGsuDemand;
+        provisioned += r.provisionedGsus;
+        totalRtTokens += r.realtimeTokensM;
+        weightedPtCov += r.realtimeTokensM * r.realtimeRouting.ptCoveredFraction;
+        weightedStdSpill +=
+          r.realtimeTokensM * r.realtimeRouting.standardPayGoFraction;
+        weightedPrioSpill +=
+          r.realtimeTokensM * r.realtimeRouting.priorityPayGoFraction;
+      }
+
+      return {
+        minFloor,
+        daytimeFloor,
+        optimalTco,
+        peak,
+        provisioned,
+        util: sim.totalsByYear[selectedYear].avgPtUtilization,
+        ptCov: totalRtTokens > 0 ? weightedPtCov / totalRtTokens : 0,
+        stdSpill: totalRtTokens > 0 ? weightedStdSpill / totalRtTokens : 0,
+        prioSpill: totalRtTokens > 0 ? weightedPrioSpill / totalRtTokens : 0,
+        modelLabel: 'All 4 lots combined · Company-wide GSU demand',
+        tokPerGsu: 0,
+      };
+    }
+
     const r = sim.byLotAndYear[activeScope][selectedYear];
     const l = lots.find((x) => x.id === activeScope)!;
     return {
@@ -149,9 +193,10 @@ export const TrafficSeasonalityChart: React.FC<TrafficSeasonalityChartProps> = (
   };
 
   // Compute 3-year weighted token shares for Donut Breakdown (either for lockedScope or all 4 lots)
-  const scopeLots = lockedScope
-    ? ([lockedScope] as const)
-    : (['lot1', 'lot2', 'lot3', 'lot4'] as const);
+  const scopeLots =
+    activeScope === 'all'
+      ? (['lot1', 'lot2', 'lot3', 'lot4'] as const)
+      : ([activeScope] as const);
   let ptTok = 0;
   let stdTok = 0;
   let prioTok = 0;

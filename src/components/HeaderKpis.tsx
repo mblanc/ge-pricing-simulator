@@ -4,6 +4,7 @@ import { FullSimulationOutput } from '../engine/simulator';
 import {
   EU_GSU_MONTHLY_PRICE_USD,
   GlobalSimConfig,
+  LotConfig,
   PtSizingMode,
 } from '../data/rfqDefaults';
 import {
@@ -18,6 +19,8 @@ export type SelectedKpiId = 'tco' | 'spend' | 'routing' | 'gsu';
 
 interface HeaderKpisProps {
   sim: FullSimulationOutput;
+  lots?: LotConfig[];
+  activeScope?: 'all' | LotConfig['id'];
   globalConfig: GlobalSimConfig;
   onChangeGlobalConfig: (next: GlobalSimConfig) => void;
   activeFspTier: 'uncommitted' | 'oneYearFsp' | 'threeYearFsp';
@@ -26,6 +29,7 @@ interface HeaderKpisProps {
   currentGlobalPtMode: PtSizingMode | 'MIXED';
   selectedKpi?: SelectedKpiId;
   onSelectKpi?: (id: SelectedKpiId) => void;
+  compact?: boolean;
 }
 
 interface SparklineProps {
@@ -104,23 +108,52 @@ const KpiSparkline: React.FC<SparklineProps> = ({ points, idSuffix }) => {
 
 export const HeaderKpis: React.FC<HeaderKpisProps> = ({
   sim,
+  lots,
+  activeScope = 'all',
   globalConfig,
   activeFspTier,
   onApplyGlobalPtMode,
   selectedKpi = 'tco',
   onSelectKpi,
+  compact = false,
 }) => {
-  const cum = sim.threeYearCumulated;
-  const activeCostObj = cum[activeFspTier];
+  const isAll = activeScope === 'all';
+  const activeLot =
+    !isAll && lots ? lots.find((l) => l.id === activeScope) : undefined;
+  const scopePrefix = activeLot ? `Lot ${activeLot.lotNumber} ` : '3-year ';
+  const scopeDesc = activeLot
+    ? `Total 36-month budget for Lot ${activeLot.lotNumber} (${activeLot.modelDisplayName})`
+    : 'Total 36-month budget across all 4 lots (reserved + overflow)';
 
   const uncommittedDisc = globalConfig.fspDiscounts.uncommittedDiscount ?? 0;
 
-  // True 0% list-rate PayGo baseline (so Option A discount % also reflects savings vs list price)
+  const y1Lot = !isAll ? sim.byLotAndYear[activeScope].y1 : null;
+  const y2Lot = !isAll ? sim.byLotAndYear[activeScope].y2 : null;
+  const y3Lot = !isAll ? sim.byLotAndYear[activeScope].y3 : null;
+
+  // True 0% list-rate PayGo baseline
   const baselineUncommittedPayGo =
-    cum.uncommitted.purePayGoUsd / Math.max(1e-6, 1 - uncommittedDisc);
+    isAll || !y1Lot || !y2Lot || !y3Lot
+      ? sim.threeYearCumulated.uncommitted.purePayGoUsd /
+        Math.max(1e-6, 1 - uncommittedDisc)
+      : y1Lot.annualCostsListUsd.purePayGoBaselineCostUsd +
+        y2Lot.annualCostsListUsd.purePayGoBaselineCostUsd +
+        y3Lot.annualCostsListUsd.purePayGoBaselineCostUsd;
+
   // The 0-GSU (No PT) Baseline at the active commercial tier:
-  const activeTierPayGo = activeCostObj.purePayGoUsd;
-  const hybridTotalActiveFsp = activeCostObj.hybridTotalUsd;
+  const activeTierPayGo =
+    isAll || !y1Lot || !y2Lot || !y3Lot
+      ? sim.threeYearCumulated[activeFspTier].purePayGoUsd
+      : y1Lot.annualCostsFspUsd[activeFspTier].purePayGoUsd +
+        y2Lot.annualCostsFspUsd[activeFspTier].purePayGoUsd +
+        y3Lot.annualCostsFspUsd[activeFspTier].purePayGoUsd;
+
+  const hybridTotalActiveFsp =
+    isAll || !y1Lot || !y2Lot || !y3Lot
+      ? sim.threeYearCumulated[activeFspTier].hybridTotalUsd
+      : y1Lot.annualCostsFspUsd[activeFspTier].hybridTotalUsd +
+        y2Lot.annualCostsFspUsd[activeFspTier].hybridTotalUsd +
+        y3Lot.annualCostsFspUsd[activeFspTier].hybridTotalUsd;
 
   const tcoRatioVsUncommitted =
     baselineUncommittedPayGo > 0
@@ -133,27 +166,53 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
 
   const isTcoFavorable = hybridTotalActiveFsp <= activeTierPayGo + 1;
 
-  const ptCost3Y = cum.uncommitted.ptCostUsd;
+  const ptCost3Y =
+    isAll || !y1Lot || !y2Lot || !y3Lot
+      ? sim.threeYearCumulated.uncommitted.ptCostUsd
+      : y1Lot.annualCostsListUsd.ptGsuAnnualCostUsd +
+        y2Lot.annualCostsListUsd.ptGsuAnnualCostUsd +
+        y3Lot.annualCostsListUsd.ptGsuAnnualCostUsd;
+
   const payGoSpillCost3Y = Math.max(0, hybridTotalActiveFsp - ptCost3Y);
   const ptShareOfSpend =
     hybridTotalActiveFsp > 0 ? ptCost3Y / hybridTotalActiveFsp : 0;
 
-  const gsuY1 = sim.totalsByYear.y1.totalProvisionedGsus;
-  const gsuY2 = sim.totalsByYear.y2.totalProvisionedGsus;
-  const gsuY3 = sim.totalsByYear.y3.totalProvisionedGsus;
+  const gsuY1 =
+    isAll || !y1Lot
+      ? sim.totalsByYear.y1.totalProvisionedGsus
+      : y1Lot.provisionedGsus;
+  const gsuY2 =
+    isAll || !y2Lot
+      ? sim.totalsByYear.y2.totalProvisionedGsus
+      : y2Lot.provisionedGsus;
+  const gsuY3 =
+    isAll || !y3Lot
+      ? sim.totalsByYear.y3.totalProvisionedGsus
+      : y3Lot.provisionedGsus;
   const isZeroPtBaseline = gsuY1 === 0 && gsuY2 === 0 && gsuY3 === 0;
 
   const avgPtUtil3Y =
-    (sim.totalsByYear.y1.avgPtUtilization +
-      sim.totalsByYear.y2.avgPtUtilization +
-      sim.totalsByYear.y3.avgPtUtilization) /
-    3;
-  const avgBreakEvenUtil = sim.avgBreakEvenUtilization;
+    isAll || !y1Lot || !y2Lot || !y3Lot
+      ? (sim.totalsByYear.y1.avgPtUtilization +
+          sim.totalsByYear.y2.avgPtUtilization +
+          sim.totalsByYear.y3.avgPtUtilization) /
+        3
+      : (y1Lot.realtimeRouting.ptUtilizationRate +
+          y2Lot.realtimeRouting.ptUtilizationRate +
+          y3Lot.realtimeRouting.ptUtilizationRate) /
+        3;
+
+  const avgBreakEvenUtil =
+    isAll || !y1Lot
+      ? sim.avgBreakEvenUtilization
+      : y1Lot.breakEvenUtilization;
   const utilDeltaVsBreakEven = avgPtUtil3Y - avgBreakEvenUtil;
   const isUtilHealthy = isZeroPtBaseline || avgPtUtil3Y >= avgBreakEvenUtil;
 
   // Compute weighted token share routed via Provisioned Throughput across 3 years
-  const lotIds = ['lot1', 'lot2', 'lot3', 'lot4'] as const;
+  const lotIds = isAll
+    ? (['lot1', 'lot2', 'lot3', 'lot4'] as const)
+    : ([activeScope] as const);
   let totalPtTokensM = 0;
   let totalAllTokensM = 0;
   for (const lid of lotIds) {
@@ -167,9 +226,18 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
     totalAllTokensM > 0 ? totalPtTokensM / totalAllTokensM : 0;
 
   // Build 12-point sparkline series from the 3-year trajectory
-  const y1Cost = sim.totalsByYear.y1[activeFspTier].hybridTotalUsd;
-  const y2Cost = sim.totalsByYear.y2[activeFspTier].hybridTotalUsd;
-  const y3Cost = sim.totalsByYear.y3[activeFspTier].hybridTotalUsd;
+  const y1Cost =
+    isAll || !y1Lot
+      ? sim.totalsByYear.y1[activeFspTier].hybridTotalUsd
+      : y1Lot.annualCostsFspUsd[activeFspTier].hybridTotalUsd;
+  const y2Cost =
+    isAll || !y2Lot
+      ? sim.totalsByYear.y2[activeFspTier].hybridTotalUsd
+      : y2Lot.annualCostsFspUsd[activeFspTier].hybridTotalUsd;
+  const y3Cost =
+    isAll || !y3Lot
+      ? sim.totalsByYear.y3[activeFspTier].hybridTotalUsd
+      : y3Lot.annualCostsFspUsd[activeFspTier].hybridTotalUsd;
   const tcoSparkPoints = [
     y1Cost * 0.88,
     y1Cost * 0.94,
@@ -185,26 +253,46 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
     y3Cost,
   ];
 
+  const y1PtCost =
+    isAll || !y1Lot
+      ? sim.totalsByYear.y1.uncommitted.ptCostUsd
+      : y1Lot.annualCostsListUsd.ptGsuAnnualCostUsd;
+  const y2PtCost =
+    isAll || !y2Lot
+      ? sim.totalsByYear.y2.uncommitted.ptCostUsd
+      : y2Lot.annualCostsListUsd.ptGsuAnnualCostUsd;
+  const y3PtCost =
+    isAll || !y3Lot
+      ? sim.totalsByYear.y3.uncommitted.ptCostUsd
+      : y3Lot.annualCostsListUsd.ptGsuAnnualCostUsd;
+
   const spendSparkPoints = [
-    sim.totalsByYear.y1.uncommitted.ptCostUsd / 12,
-    (sim.totalsByYear.y1.uncommitted.ptCostUsd * 1.05) / 12,
-    (sim.totalsByYear.y2.uncommitted.ptCostUsd * 0.95) / 12,
-    sim.totalsByYear.y2.uncommitted.ptCostUsd / 12,
-    (sim.totalsByYear.y2.uncommitted.ptCostUsd * 1.08) / 12,
-    (sim.totalsByYear.y3.uncommitted.ptCostUsd * 0.96) / 12,
-    sim.totalsByYear.y3.uncommitted.ptCostUsd / 12,
-    (sim.totalsByYear.y3.uncommitted.ptCostUsd * 1.02) / 12,
+    y1PtCost / 12,
+    (y1PtCost * 1.05) / 12,
+    (y2PtCost * 0.95) / 12,
+    y2PtCost / 12,
+    (y2PtCost * 1.08) / 12,
+    (y3PtCost * 0.96) / 12,
+    y3PtCost / 12,
+    (y3PtCost * 1.02) / 12,
   ];
 
+  const y1Tok =
+    isAll || !y1Lot ? sim.totalsByYear.y1.totalTokensM : y1Lot.totalTokensM;
+  const y2Tok =
+    isAll || !y2Lot ? sim.totalsByYear.y2.totalTokensM : y2Lot.totalTokensM;
+  const y3Tok =
+    isAll || !y3Lot ? sim.totalsByYear.y3.totalTokensM : y3Lot.totalTokensM;
+
   const tokenSparkPoints = [
-    sim.totalsByYear.y1.totalTokensM * 0.85,
-    sim.totalsByYear.y1.totalTokensM * 0.92,
-    sim.totalsByYear.y1.totalTokensM,
-    (sim.totalsByYear.y1.totalTokensM + sim.totalsByYear.y2.totalTokensM) * 0.5,
-    sim.totalsByYear.y2.totalTokensM,
-    (sim.totalsByYear.y2.totalTokensM + sim.totalsByYear.y3.totalTokensM) * 0.5,
-    sim.totalsByYear.y3.totalTokensM * 0.96,
-    sim.totalsByYear.y3.totalTokensM,
+    y1Tok * 0.85,
+    y1Tok * 0.92,
+    y1Tok,
+    (y1Tok + y2Tok) * 0.5,
+    y2Tok,
+    (y2Tok + y3Tok) * 0.5,
+    y3Tok * 0.96,
+    y3Tok,
   ];
 
   const gsuSparkPoints = [
@@ -220,7 +308,10 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
 
   const ptDiscount = globalConfig.fspDiscounts.ptDiscount ?? 0.20;
   const gsuMonthlyRate = Math.round(
-    EU_GSU_MONTHLY_PRICE_USD[globalConfig.gsuCommitTerm] * (1 - ptDiscount)
+    EU_GSU_MONTHLY_PRICE_USD[
+      activeLot?.gsuCommitTerm ?? globalConfig.gsuCommitTerm
+    ] *
+      (1 - ptDiscount)
   );
 
   const savingsVsListUsd = Math.max(0, baselineUncommittedPayGo - hybridTotalActiveFsp);
@@ -240,8 +331,8 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
   }[] = [
     {
       id: 'tco',
-      label: '3-year total cost of ownership (TCO)',
-      businessSubtext: 'Total 36-month budget across all 4 lots (reserved + overflow)',
+      label: `${scopePrefix}total cost of ownership (TCO)`,
+      businessSubtext: scopeDesc,
       tooltip: `Exact 36-month TCO: ${formatCurrencyExact(
         hybridTotalActiveFsp
       )} vs ${formatCurrencyExact(
@@ -296,10 +387,10 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
       label: '3-year token volume & PT coverage',
       businessSubtext: 'Total AI traffic volume & share handled by reserved capacity',
       tooltip: `Total 36-month token volume: ${formatTokensMillions(
-        cum.totalTokensM
+        totalAllTokensM
       )} (${formatPct(ptCoveredTokenShare, 1)} absorbed by PT base).`,
-      value: formatTokensMillions(cum.totalTokensM),
-      exactTitle: `${cum.totalTokensM.toLocaleString()}M total tokens across 36 months`,
+      value: formatTokensMillions(totalAllTokensM),
+      exactTitle: `${totalAllTokensM.toLocaleString()}M total tokens across 36 months`,
       deltaText: isZeroPtBaseline
         ? '0.0% PT'
         : `▲ ${formatPct(ptCoveredTokenShare, 1)}`,
@@ -342,7 +433,7 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
       <div
         role="region"
         aria-label="Key performance indicators"
-        className="grid grid-cols-12 gap-6"
+        className={`grid grid-cols-12 ${compact ? 'gap-3.5' : 'gap-6'}`}
       >
         {cards.map((card) => {
           const isSelected = selectedKpi === card.id;
@@ -359,7 +450,11 @@ export const HeaderKpis: React.FC<HeaderKpisProps> = ({
                   onSelectKpi?.(card.id);
                 }
               }}
-              className={`col-span-12 sm:col-span-6 lg:col-span-3 min-h-[164px] p-5 flex flex-col justify-between text-left cursor-pointer relative group ${
+              className={`col-span-12 sm:col-span-6 ${
+                compact
+                  ? '2xl:col-span-3 min-h-[144px] p-4'
+                  : 'lg:col-span-3 min-h-[164px] p-5'
+              } flex flex-col justify-between text-left cursor-pointer relative group ${
                 isSelected ? 'md-card-selected' : 'md-card-interactive'
               }`}
             >

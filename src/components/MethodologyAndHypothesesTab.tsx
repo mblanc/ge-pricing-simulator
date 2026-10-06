@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import katex from 'katex';
 import { Calculator, CheckCircle2, Layers, ShieldCheck, Sliders } from 'lucide-react';
 import {
   ENDPOINT_LOCATION_SPECS,
@@ -7,6 +8,7 @@ import {
   getLotEffectivePricesPer1M,
   GlobalSimConfig,
   LotConfig,
+  PtSizingMode,
 } from '../data/rfqDefaults';
 import { FullSimulationOutput, YearKey } from '../engine/simulator';
 import {
@@ -23,6 +25,40 @@ interface MethodologyAndHypothesesTabProps {
   selectedYear: YearKey;
   activeFspTier: 'uncommitted' | 'oneYearFsp' | 'threeYearFsp';
 }
+
+const LatexFormula: React.FC<{ latex: string }> = ({ latex }) => {
+  const html = useMemo(
+    () =>
+      katex.renderToString(latex, {
+        displayMode: true,
+        throwOnError: false,
+        strict: false,
+      }),
+    [latex]
+  );
+
+  return (
+    <div
+      className="overflow-x-auto py-1.5 px-1 text-[var(--md-on-surface)] [&_.katex-display]:!my-1 [&_.katex-display]:!text-left [&_.katex]:!text-[0.875rem]"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+};
+
+const formatPtSizingModeLabel = (mode: PtSizingMode): string => {
+  switch (mode) {
+    case 'OPTIMAL_TCO':
+      return 'Optimal TCO';
+    case 'MIN_FLOOR':
+      return 'Minimum 24/7 floor';
+    case 'DAYTIME_FLOOR':
+      return 'Daytime floor (99% peak)';
+    case 'NONE':
+      return '0 GSUs (PayGo only)';
+    case 'MANUAL':
+      return 'Manual GSUs';
+  }
+};
 
 export const MethodologyAndHypothesesTab: React.FC<
   MethodologyAndHypothesesTabProps
@@ -68,6 +104,7 @@ export const MethodologyAndHypothesesTab: React.FC<
 
   const exLot = lots[0];
   const exSim = sim.byLotAndYear.lot1[selectedYear];
+  const exPrices = getLotEffectivePricesPer1M(exLot);
   const exYearLabel =
     selectedYear === 'y1'
       ? 'Year 1 (2027)'
@@ -83,6 +120,13 @@ export const MethodologyAndHypothesesTab: React.FC<
   const euUsNetGsuMo = Math.round(euUsListGsuMo * (1 - ptDiscount));
   const globalListGsuMo = Math.round(euUsListGsuMo / 1.1);
   const globalNetGsuMo = Math.round(globalListGsuMo * (1 - ptDiscount));
+
+  const standardSpilloverSharePct = Math.round(
+    (1 - globalConfig.payGoRetryToPriorityRatio) * 100
+  );
+  const prioritySpilloverSharePct = Math.round(
+    globalConfig.payGoRetryToPriorityRatio * 100
+  );
 
   return (
     <section
@@ -109,7 +153,7 @@ export const MethodologyAndHypothesesTab: React.FC<
               {activeTierLabel}
             </div>
             <div className="type-body-sm text-[var(--md-on-surface-variant)]">
-              Net GSU rate ({globalConfig.gsuCommitTerm.replace('_', '-')}, -{ptDiscountPct}% PT):{' '}
+              Net GSU rate ({globalConfig.gsuCommitTerm === '1_YEAR' ? '1-year term' : 'Monthly term'}, -{ptDiscountPct}% PT):{' '}
               <strong>{formatCurrencyExact(euUsNetGsuMo)}/mo</strong> (<code>eu</code> / <code>us</code>, list {formatCurrencyExact(euUsListGsuMo)}) ·{' '}
               <strong>{formatCurrencyExact(globalNetGsuMo)}/mo</strong> (<code>global</code>, list {formatCurrencyExact(globalListGsuMo)})
             </div>
@@ -193,7 +237,7 @@ export const MethodologyAndHypothesesTab: React.FC<
                   </div>
                 </th>
                 <th className="px-4 type-label-lg text-[var(--md-on-surface-variant)] text-right">
-                  <div>Non-cached input ($/1M)</div>
+                  <div>Uncached input ($/1M)</div>
                   <div className="type-body-sm font-normal text-[var(--md-on-surface-variant)]">
                     Standard prompt tokens
                   </div>
@@ -371,7 +415,7 @@ export const MethodologyAndHypothesesTab: React.FC<
                   </div>
                 </th>
                 <th className="px-4 type-label-lg text-[var(--md-on-surface-variant)] text-right">
-                  <div>Cached vs non-cached</div>
+                  <div>Cached vs uncached</div>
                   <div className="type-body-sm font-normal text-[var(--md-on-surface-variant)]">
                     Memory cache hit rate (-90%)
                   </div>
@@ -410,6 +454,12 @@ export const MethodologyAndHypothesesTab: React.FC<
                 const cachePct = Math.round(lot.cacheRatio * 100);
                 const nonCachePct = 100 - cachePct;
                 const batchPct = Math.round(lot.batchRatio * 100);
+                const thinkingLabel =
+                  lot.thinkingLevel === 'HIGH'
+                    ? 'High'
+                    : lot.thinkingLevel === 'MEDIUM'
+                    ? 'Medium'
+                    : 'Low';
                 const tierDesc =
                   lot.id === 'lot4'
                     ? lot.thinkingLevel === 'MEDIUM'
@@ -418,7 +468,7 @@ export const MethodologyAndHypothesesTab: React.FC<
                       ? 'NB2 Lite'
                       : 'NB Pro'
                     : lot.supportsThinkingLevel
-                    ? `${lot.thinkingLevel} (${lot.thinkingMultiplierByLevel[lot.thinkingLevel]}×)`
+                    ? `${thinkingLabel} (${lot.thinkingMultiplierByLevel[lot.thinkingLevel]}×)`
                     : 'Standard (0×)';
 
                 return (
@@ -431,7 +481,7 @@ export const MethodologyAndHypothesesTab: React.FC<
                         {lot.shortName}
                       </div>
                       <div className="type-body-sm text-[var(--md-on-surface-variant)]">
-                        Mode: {lot.ptSizingMode}
+                        {formatPtSizingModeLabel(lot.ptSizingMode)}
                       </div>
                     </td>
                     <td className="px-4 type-data-cell text-right">
@@ -475,62 +525,80 @@ export const MethodologyAndHypothesesTab: React.FC<
             </h3>
           </div>
           <p className="type-body-sm text-[var(--md-on-surface-variant)] mt-1">
-            Exact equations executed by the simulation engine, illustrated with live numbers from <strong>{exLot.shortName}</strong> in <strong>{exYearLabel}</strong> under <strong>{activeTierLabel}</strong>.
+            Mathematical equations executed by the simulation engine using comprehensible term names, paired with live numbers from <strong>{exLot.shortName}</strong> in <strong>{exYearLabel}</strong> under <strong>{activeTierLabel}</strong>.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-4">
           {/* Formula 1 */}
-          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-2">
+          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-3">
             <div>
               <div className="type-label-lg text-[var(--md-on-surface)]">
-                Token split & blended Standard PayGo rate ($/1M)
+                1. Blended Standard PayGo Rate ($/1M tokens)
               </div>
               <div className="type-body-sm text-[var(--md-primary)]">
-                Weighted average unit cost per 1M tokens before discounts
+                Weighted average unit cost per 1M tokens before commercial discounts
               </div>
             </div>
             <p className="type-body-sm text-[var(--md-on-surface-variant)]">
-              Total annual volume is partitioned into Non-Cached Input, Context-Cached Input (-90%), and Output (Text + Thinking or Image) according to the lot's ratios:
+              Annual token volume is split into Uncached Input, Context-Cached Input (-90%), and Output tokens, then weighted by each token type's SKU rate:
             </p>
-            <div className="p-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] type-data-cell space-y-1">
-              <div>
-                <code>
-                  P_blended = (In_raw × P_in + In_cache × P_cache + Out × P_out) / Total_Tokens
-                </code>
+            <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2.5 tabular-nums">
+              <LatexFormula
+                latex={String.raw`\text{Blended PayGo Rate} = \frac{\left(\text{Uncached Input} \times \text{Input Price}\right) + \left(\text{Cached Input} \times \text{Cache Price}\right) + \left(\text{Output Tokens} \times \text{Output Price}\right)}{\text{Total Annual Tokens}}`}
+              />
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--md-outline-variant)] type-body-sm text-[var(--md-on-surface-variant)]">
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Uncached Input: <strong>{formatTokensMillions(exSim.tokensBreakdownM.inputNonCachedM)}</strong> × ${exPrices.inputNonCached.toFixed(2)}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Cached Input: <strong>{formatTokensMillions(exSim.tokensBreakdownM.inputCachedM)}</strong> × ${exPrices.inputCached.toFixed(2)}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Output Tokens: <strong>{formatTokensMillions(exSim.tokensBreakdownM.outputTextAndThinkingM)}</strong> × ${exPrices.outputTextAndThinking.toFixed(2)}
+                </span>
               </div>
-              <div className="text-[var(--md-primary)]">
-                Live ({exLot.shortName}, {exYearLabel}):{' '}
+              <div className="type-body-sm text-[var(--md-primary)]">
+                Live result ({exLot.shortName}, {exYearLabel}):{' '}
                 <strong>
                   ${exSim.blendedStandardPayGoPricePer1M.toFixed(3)} per 1M tokens
                 </strong>{' '}
-                across {formatTokensMillions(exSim.totalTokensM)} tokens
+                across {formatTokensMillions(exSim.totalTokensM)} total tokens
               </div>
             </div>
           </div>
 
           {/* Formula 2 */}
-          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-2">
+          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-3">
             <div>
               <div className="type-label-lg text-[var(--md-on-surface)]">
-                GSU burndown conversion & hourly demand curve
+                2. GSU Burndown Weighting & Hourly Capacity Demand
               </div>
               <div className="type-body-sm text-[var(--md-primary)]">
-                Translating token volume into required reserved capacity units (GSUs)
+                Translating real-time token volume into required reserved capacity units (GSUs)
               </div>
             </div>
             <p className="type-body-sm text-[var(--md-on-surface-variant)]">
-              Google Cloud Provisioned Throughput measures capacity in burndown tokens per second (<code>tok/s</code>). Output tokens consume more compute than input tokens and are weighted by the model's official multiplier:
+              Output tokens consume more compute than input tokens and are weighted by the model's official burndown multipliers before dividing by throughput per GSU:
             </p>
-            <div className="p-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] type-data-cell space-y-1">
-              <div>
-                <code>
-                  Burndown_Tokens = (In_raw × {exLot.gsuSpec.burndownWeights.inputNonCached} + In_cache × {exLot.gsuSpec.burndownWeights.inputCached} + Out × {exLot.gsuSpec.burndownWeights.outputTextAndThinking}) × (1 - Batch%)
-                </code>
+            <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2.5 tabular-nums">
+              <LatexFormula
+                latex={String.raw`\text{Hourly GSU Demand}(h) = \frac{\Big(\text{Uncached Input} \times w_{\text{input}} + \text{Cached Input} \times w_{\text{cache}} + \text{Output} \times w_{\text{output}}\Big) \times \left(1 - \text{Batch Share}\right)}{\text{Throughput per GSU (tok/s)}}`}
+              />
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--md-outline-variant)] type-body-sm text-[var(--md-on-surface-variant)]">
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Weights: <strong>{exLot.gsuSpec.burndownWeights.inputNonCached}×</strong> Input, <strong>{exLot.gsuSpec.burndownWeights.inputCached}×</strong> Cache, <strong>{exLot.gsuSpec.burndownWeights.outputTextAndThinking}×</strong> Output
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Batch Share: <strong>{Math.round(exLot.batchRatio * 100)}%</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Throughput per GSU: <strong>{Math.round(exLot.gsuSpec.throughputPerGsuPerSec)} tok/s</strong>
+                </span>
               </div>
-              <div className="text-[var(--md-primary)]">
-                Live ({exLot.shortName}, {exYearLabel}):{' '}
-                <strong>{exSim.avgGsuDemand.toFixed(1)} avg GSUs</strong> · Floor:{' '}
+              <div className="type-body-sm text-[var(--md-primary)]">
+                Live result ({exLot.shortName}, {exYearLabel}):{' '}
+                <strong>{exSim.avgGsuDemand.toFixed(1)} avg GSUs</strong> · 24/7 Floor:{' '}
                 <strong>{Math.round(exSim.minHourlyGsuDemand)} GSUs</strong> · Peak:{' '}
                 <strong>{Math.round(exSim.peakHourlyGsuDemand)} GSUs</strong>
               </div>
@@ -538,30 +606,39 @@ export const MethodologyAndHypothesesTab: React.FC<
           </div>
 
           {/* Formula 3 */}
-          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-2">
+          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-3">
             <div>
               <div className="type-label-lg text-[var(--md-on-surface)]">
-                168-hour seasonality routing (PT covered vs PayGo spillover)
+                3. 168-Hour Traffic Routing (Reserved PT vs. PayGo Spillover)
               </div>
               <div className="type-body-sm text-[var(--md-primary)]">
-                Splitting real-time traffic between fixed GSUs and variable overflow
+                Splitting hourly real-time traffic between fixed GSUs and on-demand overflow
               </div>
             </div>
             <p className="type-body-sm text-[var(--md-on-surface-variant)]">
-              For every hour <code>h</code> of the 168-hour week, demand below <code>GSU_provisioned</code> is absorbed by PT ($0 token cost), while demand above <code>GSU_provisioned</code> spills over to PayGo:
+              For each hour <var>h</var> of the 168-hour week, traffic up to your Reserved GSUs ceiling is absorbed by PT at $0 per-token cost, while any burst above the ceiling spills over to PayGo:
             </p>
-            <div className="p-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] type-data-cell space-y-1">
-              <div>
-                <code>
-                  Covered(h) = min(Demand(h), GSU_prov) | Spillover(h) = max(0, Demand(h) - GSU_prov)
-                </code>
+            <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2.5 tabular-nums">
+              <LatexFormula
+                latex={String.raw`\begin{aligned}
+\text{PT Covered Traffic}(h) &= \min\!\Big(\text{Hourly GSU Demand}(h),\; \text{Reserved GSUs}\Big) \\[4pt]
+\text{PayGo Spillover Traffic}(h) &= \max\!\Big(0,\; \text{Hourly GSU Demand}(h) - \text{Reserved GSUs}\Big)
+\end{aligned}`}
+              />
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--md-outline-variant)] type-body-sm text-[var(--md-on-surface-variant)]">
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Reserved GSUs: <strong>{exSim.provisionedGsus} GSUs</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  GSU Utilization: <strong>{formatPct(exSim.realtimeRouting.ptUtilizationRate, 1)}</strong>
+                </span>
               </div>
-              <div className="text-[var(--md-primary)]">
-                Live ({exLot.shortName}, {exSim.provisionedGsus} GSUs):{' '}
+              <div className="type-body-sm text-[var(--md-primary)]">
+                Live result ({exLot.shortName}, {exSim.provisionedGsus} GSUs):{' '}
                 <strong>
                   {formatPct(exSim.realtimeRouting.ptCoveredFraction, 1)} PT covered
                 </strong>{' '}
-                ({formatPct(exSim.realtimeRouting.ptUtilizationRate, 1)} GSU utilization) ·{' '}
+                ·{' '}
                 <strong>
                   {formatPct(
                     exSim.realtimeRouting.standardPayGoFraction +
@@ -575,53 +652,81 @@ export const MethodologyAndHypothesesTab: React.FC<
           </div>
 
           {/* Formula 4 */}
-          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-2">
+          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-3">
             <div>
               <div className="type-label-lg text-[var(--md-on-surface)]">
-                Priority 1.8× retry uplift & break-even GSU utilization
+                4. Spillover Priority Uplift & Break-Even GSU Utilization
               </div>
               <div className="type-body-sm text-[var(--md-primary)]">
-                Minimum usage needed for a reserved GSU to be cheaper than PayGo
+                Minimum utilization threshold where 1 reserved GSU becomes cheaper than PayGo
               </div>
             </div>
             <p className="type-body-sm text-[var(--md-on-surface-variant)]">
-              Spillover tokens are split between Standard PayGo (1.0×) and Priority PayGo (1.8×). A GSU saves money whenever its utilization exceeds the break-even ratio between annual GSU cost and discounted PayGo value:
+              Spillover traffic is split between Standard PayGo (1.0×) and Priority PayGo (1.8×). A reserved GSU reduces TCO whenever its utilization exceeds the ratio of its annual subscription cost to its full-load PayGo value:
             </p>
-            <div className="p-3 rounded-[8px] bg-[var(--md-surface-container-lowest)] type-data-cell space-y-1">
-              <div>
-                <code>
-                  M_overflow = (1 - r_prio)×1.0 + r_prio×1.8 = {overflowMult.toFixed(2)}× | U_breakeven = Cost_GSU / Value_PayGo
-                </code>
+            <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2.5 tabular-nums">
+              <LatexFormula
+                latex={String.raw`\begin{aligned}
+\text{Spillover Rate Multiplier} &= \left(\text{Standard Share} \times 1.0\right) + \left(\text{Priority Share} \times 1.8\right) \\[6pt]
+\text{Break-Even GSU Utilization} &= \frac{\text{Annual Net Cost of 1 GSU}}{\text{Annual Discounted PayGo Cost of 1 GSU at 100\% Load}}
+\end{aligned}`}
+              />
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--md-outline-variant)] type-body-sm text-[var(--md-on-surface-variant)]">
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Spillover Split: <strong>{standardSpilloverSharePct}% Standard (1.0×)</strong> / <strong>{prioritySpilloverSharePct}% Priority (1.8×)</strong> → <strong>{overflowMult.toFixed(2)}×</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Annual Net Cost of 1 GSU: <strong>{formatCurrencyExact(gsuAnnual)}/yr</strong>
+                </span>
               </div>
-              <div className="text-[var(--md-primary)]">
+              <div className="type-body-sm text-[var(--md-primary)]">
                 Live Break-Even Utilization ({exLot.shortName}, {activeTierLabel}):{' '}
-                <strong>{formatPct(exSim.breakEvenUtilization, 1)}</strong> (GSU annual cost:{' '}
-                {formatCurrencyExact(gsuAnnual)}/yr)
+                <strong>{formatPct(exSim.breakEvenUtilization, 1)}</strong>
               </div>
             </div>
           </div>
 
           {/* Formula 5 */}
-          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-2 lg:col-span-2">
+          <div className="p-4 rounded-[12px] bg-[var(--md-surface-container)] space-y-3">
             <div>
               <div className="flex items-center gap-2 type-label-lg text-[var(--md-on-surface)]">
                 <CheckCircle2 className="w-4 h-4 text-[var(--md-positive)]" />
-                <span>Final annual & 3-year Hybrid TCO equation (-{ptDiscountPct}% PT discount & -{(activeDisc * 100).toFixed(0)}% PayGo discount)</span>
+                <span>5. Final Annual Hybrid TCO Equation (-{ptDiscountPct}% PT discount & -{(activeDisc * 100).toFixed(0)}% PayGo discount)</span>
               </div>
               <div className="type-body-sm text-[var(--md-primary)] mt-0.5">
-                Total budget = Fixed monthly GSU subscription + Discounted variable overflow & batch
+                Total budget = Fixed reserved GSU subscription + Discounted variable spillover & async batch
               </div>
             </div>
             <p className="type-body-sm text-[var(--md-on-surface-variant)]">
-              Net Provisioned Throughput (<code>GSU_prov × 12 × List_GSU_Rate × (1 - PT_Discount)</code>) is added to the discounted variable token spend (<code>Standard_PayGo + Priority_PayGo_1.8x + Async_Batch_0.5x</code>) multiplied by <code>(1 - Discount_PayGo)</code>:
+              Net Provisioned Throughput subscription is summed with the discounted variable token spend across Standard Spillover, Priority Spillover (1.8×), and Async Batch (0.5×):
             </p>
-            <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] type-data-cell space-y-1.5">
-              <div>
-                <code>
-                  Hybrid_TCO = [ GSU_prov × 12 × ${gsuListMonthly} × (1 - {ptDiscountPct}%) = ${gsuMonthly}/mo ] + [ Standard_PayGo_Spillover + Priority_1.8x_Spillover + Batch_0.5x ] × (1 - {(activeDisc * 100).toFixed(0)}%)
-                </code>
+            <div className="p-3.5 rounded-[8px] bg-[var(--md-surface-container-lowest)] space-y-2.5 tabular-nums">
+              <LatexFormula
+                latex={String.raw`\begin{aligned}
+\text{Annual Hybrid TCO} &= \underbrace{\text{Reserved GSUs} \times 12 \times \text{Monthly GSU List Price} \times \left(1 - \text{PT Discount}\right)}_{\text{Fixed Reserved Capacity Cost (PT)}} \\[6pt]
+&\quad + \underbrace{\Big(\text{Standard Spillover} + \text{Priority Spillover} + \text{Async Batch}\Big) \times \left(1 - \text{PayGo Discount}\right)}_{\text{Discounted Variable Consumption Cost (PayGo + Batch)}}
+\end{aligned}`}
+              />
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--md-outline-variant)] type-body-sm text-[var(--md-on-surface-variant)]">
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Monthly GSU List Price: <strong>{formatCurrencyExact(gsuListMonthly)}/mo</strong> × (1 - {ptDiscountPct}%) = <strong>{formatCurrencyExact(gsuMonthly)}/mo net</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Fixed Reserved Capacity Cost: <strong>{formatCurrencyExact(exSim.annualCostsListUsd.ptGsuAnnualCostUsd)}</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[var(--md-surface-container)]">
+                  Discounted Variable Cost (-{(activeDisc * 100).toFixed(0)}%):{' '}
+                  <strong>
+                    {formatCurrencyExact(
+                      (exSim.annualCostsListUsd.standardPayGoSpilloverCostUsd +
+                        exSim.annualCostsListUsd.priorityPayGoRetryCostUsd +
+                        exSim.annualCostsListUsd.batchCostUsd) *
+                        (1 - activeDisc)
+                    )}
+                  </strong>
+                </span>
               </div>
-              <div className="text-[var(--md-primary)] flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--md-outline-variant)]">
+              <div className="type-body-sm text-[var(--md-primary)] flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--md-outline-variant)]">
                 <span>
                   Live {exLot.shortName} ({exYearLabel}):{' '}
                   <strong>
